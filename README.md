@@ -58,6 +58,7 @@ bin/panorama --revert              # put monitors.lua back as it was before the 
 bin/panorama --backups             # list backups (~/.local/state/panorama/backups)
 ./install.sh                       # symlink `panorama` + desktop entry into ~/.local
 ./install.sh --uninstall
+(cd packaging/aur && PANORAMA_REPO=file://$PWD/../.. makepkg -si)   # system package from committed HEAD
 node --test tests/                 # unit tests for lib/
 tests/e2e/apply.sh                 # apply/keep/revert flow against a headless output
 tests/e2e/persist.sh               # backup/write/restore helper on temp files

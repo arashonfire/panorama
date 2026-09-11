@@ -476,7 +476,15 @@ Not done / not tested:
 - [ ] Investigate (Hyprland / NVIDIA): after repeated HDR ↔ sRGB switches the
       OLED stayed in HDR mode (backlight ignored) while Hyprland reported
       sRGB; one more HDR on/off cleared it. Needs a reliable repro first.
-- [ ] Packaging (AUR `PKGBUILD` for `panorama`), screenshots, docs
+- [x] Packaging: `packaging/aur/PKGBUILD` (`panorama-git`) installs the app
+      to `/usr/share/panorama`, links `/usr/bin/panorama`, runs the unit tests
+      in `check()`. Builds locally with `PANORAMA_REPO=file://…`. Before the
+      AUR: publish the repository (set `url`), pick a license + `LICENSE`,
+      generate `.SRCINFO`.
+- [x] Docs pass: README shortcut table, Omarchy menu and hotkey notes,
+      current project layout.
+- [ ] README screenshots (need the screen on; grim can't capture while DPMS
+      is off)
 
 Findings:
 - Keyboard move can't jump a display to another side of its neighbour: a step

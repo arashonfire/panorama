@@ -2,7 +2,8 @@
 #
 # Panorama: display settings for Hyprland (Quickshell app).
 # Builds from git. Set _repo to the published repository before submitting to
-# the AUR; for a local test build: PANORAMA_REPO=/path/to/checkout makepkg -si
+# the AUR; for a local test build (committed HEAD only):
+#   PANORAMA_REPO=file:///path/to/checkout makepkg -si
 
 pkgname=panorama-git
 _name=panorama
