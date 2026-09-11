@@ -12,7 +12,7 @@ pkgrel=1
 pkgdesc='Display settings for Hyprland: arrange monitors, resolution, scaling, HDR, VRR, brightness, profiles'
 arch=('any')
 url='https://github.com/CHANGEME/panorama'
-license=('LicenseRef-unknown')  # TODO: choose a license and add a LICENSE file before publishing
+license=('MIT')
 depends=(
   'hyprland'     # Lua config (0.56+)
   'quickshell'   # qs 0.3+
@@ -60,7 +60,5 @@ package() {
 
   install -Dm644 share/applications/panorama.desktop "$pkgdir/usr/share/applications/panorama.desktop"
   install -Dm644 README.md "$pkgdir/usr/share/doc/$_name/README.md"
-  if [[ -f LICENSE ]]; then
-    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
-  fi
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

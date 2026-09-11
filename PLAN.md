@@ -479,7 +479,7 @@ Not done / not tested:
 - [x] Packaging: `packaging/aur/PKGBUILD` (`panorama-git`) installs the app
       to `/usr/share/panorama`, links `/usr/bin/panorama`, runs the unit tests
       in `check()`. Builds locally with `PANORAMA_REPO=file://…`. Before the
-      AUR: publish the repository (set `url`), pick a license + `LICENSE`,
+      AUR: publish the repository (set `url`), MIT `LICENSE` added,
       generate `.SRCINFO`.
 - [x] Docs pass: README shortcut table, Omarchy menu and hotkey notes,
       current project layout.

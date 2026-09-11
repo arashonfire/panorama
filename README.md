@@ -20,7 +20,7 @@ brightness too, so you never have to hand-edit config files:
 - Safe apply: every change is live-previewed, and reverts after 15 seconds
   unless you confirm it
 
-> Status: **Phase 5, layout, color, HDR, VRR and brightness.** Arrange,
+> Status: **Phase 7, polish and packaging.** Arrange,
 > resize, rescale, rotate, mirror and turn displays on/off. Set color presets,
 > 10-bit, HDR (including forcing it on panels Hyprland misreads), SDR-in-HDR
 > brightness, luminance, ICC and VRR per monitor, plus Hyprland's global
@@ -29,8 +29,9 @@ brightness too, so you never have to hand-edit config files:
 > every time, undoable). Brightness (laptop backlight, DDC/CI) applies
 > instantly and stays in sync with the brightness keys. Profiles remember a
 > layout per set of monitors and switch by themselves when you plug in or
-> unplug (a few lines of Lua in the saved section, no daemon). Polish and
-> packaging come next. See [PLAN.md](PLAN.md) for the roadmap.
+> unplug (a few lines of Lua in the saved section, no daemon). Fully usable
+> from the keyboard, reachable from the Omarchy menu, and packaged as an AUR
+> `PKGBUILD`. See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Requirements
 
@@ -336,3 +337,7 @@ docs/upstream/            draft bug reports for Hyprland
   validated before serialization.
 - **Verify.** After applying, the reported state is compared with the requested
   state, and `hyprctl configerrors` is checked after saving.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
