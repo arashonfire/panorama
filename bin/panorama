@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Launches Panorama, or brings the running instance forward.
+set -euo pipefail
+
+root=${PANORAMA_ROOT:-$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)}
+
+usage() {
+  cat <<EOF
+Usage: panorama [option]
+
+Display settings for Hyprland.
+
+Options:
+  --identify   Show each display's number on its screen
+  --quit       Close a running Panorama
+  --revert     Put back monitors.lua as it was before Panorama's last save
+  --backups    List Panorama's backups of monitors.lua, newest first
+  --brightness [--hdr] VALUE
+               Change the focused monitor's brightness (+5%, 5%-, 40%) with an
+               on-screen display, for key bindings. With --hdr, a monitor in
+               HDR gets its SDR brightness changed instead (needs Panorama running).
+  -h, --help   Show this help
+EOF
+}
+
+revert() {
+  local backup
+  backup=$("$root/bin/panorama-persist" restore) || exit 1
+  hyprctl reload >/dev/null 2>&1 || true
+  echo "panorama: restored $("$root/bin/panorama-persist" path) from $backup"
+}
+
+ipc() {
+  qs -p "$root" ipc call panorama "$@" >/dev/null 2>&1
+}
+
+case "${1:-}" in
+  "") ;;
+  --identify) ipc identify || { echo "panorama: not running" >&2; exit 1; }; exit 0 ;;
+  --quit) ipc quit || true; exit 0 ;;
+  --revert) revert; exit 0 ;;
+  --backups) "$root/bin/panorama-persist" backups; exit 0 ;;
+  --brightness) shift; exec "$root/bin/panorama-brightness" key "$@" ;;
+  -h | --help) usage; exit 0 ;;
+  *) usage >&2; exit 2 ;;
+esac
+
+command -v qs >/dev/null || { echo "panorama: Quickshell (qs) is not installed" >&2; exit 1; }
+[[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]] || { echo "panorama: Hyprland is not running" >&2; exit 1; }
+
+if ipc show; then
+  hyprctl dispatch 'hl.dsp.focus({ window = "title:^Panorama$" })' >/dev/null 2>&1 || true
+  exit 0
+fi
+
+# Hyprland tiles Quickshell's FloatingWindow, so float it with a runtime rule.
+# A config reload drops the rule; it is re-added on every launch.
+hyprctl eval 'hl.window_rule({ name = "panorama-float", match = { class = "^org\\.quickshell$", title = "^Panorama$" }, float = true, center = true, size = { 1100, 720 } })' >/dev/null 2>&1 || true
+
+exec qs -n -d -p "$root"

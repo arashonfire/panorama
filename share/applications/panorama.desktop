@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Panorama
+GenericName=Display Settings
+Comment=Arrange monitors and configure resolution, scaling, HDR and VRR on Hyprland
+Exec=panorama
+Icon=video-display
+Terminal=false
+Categories=Settings;HardwareSettings;
+Keywords=monitor;display;screen;resolution;refresh;scale;rotate;hdr;vrr;brightness;
+StartupNotify=false

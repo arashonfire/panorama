@@ -1,0 +1,4 @@
+#!/bin/sh
+# Stand-in for Quickshell's `qs` in tests: behaves as if Panorama isn't running.
+echo "No running instances" >&2
+exit 1

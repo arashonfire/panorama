@@ -1,0 +1,351 @@
+// Panorama: display settings for Hyprland.
+// Run with `bin/panorama` (or `qs -p <this directory>`).
+import QtQuick
+import QtQuick.Layouts
+import Quickshell
+import Quickshell.Io
+import qs.services
+import qs.ui
+
+ShellRoot {
+  id: shell
+
+  property string selectedName: ""
+  property bool identifying: false
+  property bool saveDialogOpen: false
+  property bool profilesOpen: false
+  readonly property var selected: Hypr.byName(selectedName)
+  // Something to save: live changes, or the file doesn't match the live state.
+  readonly property bool canOpenSave: Persist.canSave && (Apply.liveUnsaved || !Persist.saved)
+
+  // Keep a valid selection: the focused monitor, else the first one.
+  function ensureSelection() {
+    if (Hypr.byName(selectedName)) return
+    var list = Hypr.monitors
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].focused) {
+        selectedName = list[i].name
+        return
+      }
+    }
+    selectedName = list.length ? list[0].name : ""
+  }
+
+  function selectRelative(delta) {
+    var list = Hypr.monitors
+    if (!list.length) return
+    var i = Hypr.numberOf(selectedName) - 1
+    selectedName = list[(i + delta + list.length) % list.length].name
+  }
+
+  function identify() {
+    identifying = true
+    identifyTimer.restart()
+  }
+
+  Connections {
+    target: Hypr
+    function onMonitorsChanged() { shell.ensureSelection() }
+  }
+
+  Timer {
+    id: identifyTimer
+    interval: 3000
+    onTriggered: shell.identifying = false
+  }
+
+  // `qs -p <dir> ipc call panorama <function> [args]`. The editing functions
+  // go through the same Draft/Apply/Persist path as the UI, confirmation included.
+  IpcHandler {
+    target: "panorama"
+    function show(): void { window.visible = true }
+    function identify(): void { shell.identify() }
+    function quit(): void { Apply.quit() }
+
+    function select(name: string): void { shell.selectedName = name }
+    function showTab(tab: string): void { inspector.tab = tab }
+    function setEnabled(name: string, on: bool): void { Draft.setEnabled(name, on) }
+    function setMode(name: string, width: int, height: int, refresh: real): void { Draft.setMode(name, width, height, refresh) }
+    function setScale(name: string, scale: real): void { Draft.setScale(name, scale) }
+    function setTransform(name: string, transform: int): void { Draft.setTransform(name, transform) }
+    function setMirror(name: string, target: string): void { Draft.setMirror(name, target) }
+    function move(name: string, x: int, y: int): void { Draft.move(name, x, y) }
+    function setColor(name: string, key: string, value: string): void { Draft.setColorFromString(name, key, value) }
+    function setGlobal(key: string, value: string): void { Draft.setGlobalFromString(key, value) }
+    function setBrightness(name: string, percent: int): void { Brightness.set(name, percent) }
+    function stepSdrBrightness(name: string, spec: string): string { return Apply.stepSdrBrightness(name, spec) }
+    function setSdrBrightness(name: string, value: real): void { Apply.setSdrBrightness(name, value) }
+    function reset(): void { Draft.reset() }
+    function apply(): void { Apply.apply() }
+    function keep(): void { Apply.keep() }
+    function revert(): void { Apply.revert() }
+
+    function setMatch(name: string, how: string): void { Persist.setMatch(name, how) }
+    function preview(): string { return Persist.sectionLines.join("\n") }
+    function openSave(): void { if (shell.canOpenSave) shell.saveDialogOpen = true }
+    function closeSave(): void { shell.saveDialogOpen = false }
+    function openProfiles(): void { shell.profilesOpen = true }
+    function closeProfiles(): void { shell.profilesOpen = false }
+
+    function addProfile(name: string): void { Persist.addProfile(name) }
+    function renameProfile(index: int, name: string): void { Persist.renameProfile(index, name) }
+    function deleteProfile(index: int): void { Persist.deleteProfile(index) }
+    function setProfileWorkspaces(index: int, monitor: string, workspaces: string): void { Persist.setProfileWorkspaces(index, monitor, workspaces) }
+    function profiles(): string {
+      return JSON.stringify({
+        profiles: Persist.profiles,
+        saved: Persist.parsed.profiles.map(function (p) { return p.name }),
+        running: Persist.activeSaved ? Persist.activeSaved.name : "",
+        matching: Persist.activeProfile ? Persist.activeProfile.name : "",
+        edited: Persist.profilesEdited
+      })
+    }
+    function save(): void { Persist.save() }
+    function undoSave(): void { Persist.undo() }
+
+    function state(): string {
+      return JSON.stringify({
+        phase: Apply.state,
+        secondsLeft: Apply.secondsLeft,
+        message: Apply.message,
+        issues: Apply.issues,
+        liveUnsaved: Apply.liveUnsaved,
+        changes: Draft.changes,
+        globalChanges: Draft.globalLines,
+        errors: Draft.errors,
+        appliedRules: Apply.appliedRules,
+        appliedGlobals: Apply.appliedGlobals,
+        globals: Globals.values,
+        brightness: Brightness.values,
+        persist: {
+          path: Persist.path,
+          state: Persist.state,
+          saved: Persist.saved,
+          hasSection: Persist.parsed.hasBlock,
+          error: Persist.parsed.error,
+          message: Persist.message,
+          messageIsError: Persist.messageIsError,
+          lastBackup: Persist.lastBackup,
+          conflicts: Persist.conflicts
+        }
+      })
+    }
+  }
+
+  Variants {
+    model: Quickshell.screens
+    IdentifyOverlay { shown: shell.identifying }
+  }
+
+  Variants {
+    model: Quickshell.screens
+    ConfirmOverlay {}
+  }
+
+  FloatingWindow {
+    id: window
+    title: "Panorama"
+    implicitWidth: Math.round(1100 * Theme.unit)
+    implicitHeight: Math.round(720 * Theme.unit)
+    minimumSize: Qt.size(Math.round(820 * Theme.unit), Math.round(520 * Theme.unit))
+    color: Theme.background
+    onClosed: Apply.quit()
+
+    Item {
+      id: main
+      anchors.fill: parent
+      focus: true
+
+      Keys.onPressed: event => {
+        var ctrl = event.modifiers & Qt.ControlModifier
+        var enter = event.key === Qt.Key_Return || event.key === Qt.Key_Enter
+        if (Apply.state === "confirming") {
+          if (enter) Apply.keep()
+          else if (event.key === Qt.Key_Escape) Apply.revert()
+          else return
+        } else if (event.key === Qt.Key_Escape) Apply.quit()
+        else if (enter && ctrl) Apply.apply()
+        else if (event.key === Qt.Key_S && ctrl) { if (shell.canOpenSave) shell.saveDialogOpen = true }
+        else if (event.key === Qt.Key_Left || event.key === Qt.Key_Up) shell.selectRelative(-1)
+        else if (event.key === Qt.Key_Right || event.key === Qt.Key_Down) shell.selectRelative(1)
+        else if (event.key === Qt.Key_I) shell.identify()
+        else if (event.key === Qt.Key_R && ctrl) Hypr.refresh()
+        else return
+        event.accepted = true
+      }
+
+      ColumnLayout {
+        anchors.fill: parent
+        anchors.margins: Theme.space.xl
+        spacing: Theme.space.lg
+
+        RowLayout {
+          Layout.fillWidth: true
+          spacing: Theme.space.md
+
+          ColumnLayout {
+            spacing: Theme.space.xs
+
+            Text {
+              text: "Panorama"
+              color: Theme.foreground
+              font.family: Theme.fontFamily
+              font.pixelSize: Theme.font.heading
+              font.bold: true
+            }
+
+            Text {
+              readonly property int active: Hypr.monitors.filter(function (m) { return !m.disabled }).length
+              text: Hypr.monitors.length + (Hypr.monitors.length === 1 ? " display" : " displays")
+                    + (active !== Hypr.monitors.length ? " · " + active + " active" : "")
+              color: Theme.muted
+              font.family: Theme.fontFamily
+              font.pixelSize: Theme.font.caption
+            }
+          }
+
+          Item { Layout.fillWidth: true }
+
+          Rectangle {
+            id: status
+            readonly property bool attention: !!Persist.parsed.error
+            readonly property bool unsaved: Apply.liveUnsaved || (Persist.parsed.hasBlock && !Persist.saved)
+            implicitWidth: statusLabel.implicitWidth + 2 * Theme.space.md
+            implicitHeight: statusLabel.implicitHeight + 2 * Theme.space.xs
+            radius: Theme.radius
+            color: "transparent"
+            border.color: attention ? Theme.urgent : unsaved ? Theme.alpha(Theme.accent, 0.6) : Theme.border
+
+            Text {
+              id: statusLabel
+              anchors.centerIn: parent
+              text: status.attention ? "monitors.lua needs attention"
+                  : Persist.busy ? "Saving…"
+                  : Apply.liveUnsaved ? "Live · not saved"
+                  : Persist.saved ? "Saved"
+                  : Persist.parsed.hasBlock ? "Not saved"
+                  : "Not saved by Panorama yet"
+              color: status.attention ? Theme.urgent : status.unsaved ? Theme.accent : Theme.muted
+              font.family: Theme.fontFamily
+              font.pixelSize: Theme.font.caption
+            }
+          }
+
+          Rectangle {
+            visible: !!Persist.activeSaved
+            implicitWidth: profileLabel.implicitWidth + 2 * Theme.space.md
+            implicitHeight: profileLabel.implicitHeight + 2 * Theme.space.xs
+            radius: Theme.radius
+            color: "transparent"
+            border.color: Theme.border
+
+            Text {
+              id: profileLabel
+              anchors.centerIn: parent
+              text: Persist.activeSaved ? "Profile: " + Persist.activeSaved.name : ""
+              color: Theme.muted
+              font.family: Theme.fontFamily
+              font.pixelSize: Theme.font.caption
+            }
+          }
+
+          PButton {
+            text: "Profiles…"
+            onClicked: shell.profilesOpen = true
+          }
+
+          PButton {
+            text: "Save…"
+            enabled: shell.canOpenSave
+            onClicked: shell.saveDialogOpen = true
+          }
+
+          PButton {
+            text: "Identify"
+            onClicked: shell.identify()
+          }
+
+          PButton {
+            text: "Refresh"
+            onClicked: Hypr.refresh()
+          }
+        }
+
+        RowLayout {
+          Layout.fillWidth: true
+          Layout.fillHeight: true
+          spacing: Theme.space.lg
+
+          ColumnLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            spacing: Theme.space.lg
+
+            LayoutCanvas {
+              Layout.fillWidth: true
+              Layout.fillHeight: true
+              selectedName: shell.selectedName
+              onSelect: name => shell.selectedName = name
+            }
+
+            BrightnessStrip {
+              Layout.fillWidth: true
+            }
+          }
+
+          Inspector {
+            id: inspector
+            Layout.preferredWidth: Math.round(400 * Theme.unit)
+            Layout.fillHeight: true
+            monitor: shell.selected
+            monitors: Hypr.monitors
+          }
+        }
+
+        ActionBar {
+          Layout.fillWidth: true
+        }
+
+        RowLayout {
+          Layout.fillWidth: true
+          spacing: Theme.space.lg
+
+          Text {
+            Layout.fillWidth: true
+            elide: Text.ElideRight
+            text: Persist.parsed.error || Hypr.error
+                  || ("Hyprland " + (Hypr.version || "?") + " · " + Persist.displayPath + " · updated " + Qt.formatTime(Hypr.updatedAt, "HH:mm:ss"))
+            color: Persist.parsed.error || Hypr.error ? Theme.urgent : Theme.muted
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.font.caption
+          }
+
+          Text {
+            text: "←/→ select · I identify · Ctrl+Enter apply · Ctrl+S save · Esc close"
+            color: Theme.muted
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.font.caption
+          }
+        }
+      }
+
+      ProfilesDialog {
+        anchors.fill: parent
+        open: shell.profilesOpen
+        onDismissed: {
+          shell.profilesOpen = false
+          main.forceActiveFocus()
+        }
+      }
+
+      SaveDialog {
+        anchors.fill: parent
+        open: shell.saveDialogOpen
+        onDismissed: {
+          shell.saveDialogOpen = false
+          main.forceActiveFocus()
+        }
+      }
+    }
+  }
+}

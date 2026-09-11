@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# Panorama's file operations on the Hyprland monitor config: atomic writes with
+# a timestamped backup first, and restoring from those backups.
+#
+#   panorama-persist path              print the config file Panorama manages
+#   panorama-persist save              new content on stdin; prints the backup path
+#   panorama-persist restore [BACKUP]  put a backup back (default: the newest)
+#   panorama-persist backups           list backups, newest first
+#
+# Environment: PANORAMA_MONITORS_FILE, PANORAMA_BACKUP_DIR, PANORAMA_KEEP_BACKUPS.
+set -euo pipefail
+
+target=${PANORAMA_MONITORS_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/monitors.lua}
+backup_dir=${PANORAMA_BACKUP_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/panorama/backups}
+keep=${PANORAMA_KEEP_BACKUPS:-30}
+
+die() {
+  echo "panorama-persist: $*" >&2
+  exit 1
+}
+
+# Write through a symlink (dotfile managers) instead of replacing it. readlink
+# fails when the directory doesn't exist yet; then the path is used as is.
+real_target() {
+  readlink -f -- "$target" 2>/dev/null || printf '%s\n' "$target"
+}
+
+stamp() {
+  date +%Y%m%d-%H%M%S.%3N
+}
+
+# Backups sort by name; `.before-restore` ones are safety copies taken by
+# `restore` and never count as "the newest".
+latest() {
+  [[ -d $backup_dir ]] || return 0
+  find "$backup_dir" -maxdepth 1 -type f -printf '%f\n' | grep -v '\.before-restore$' | sort | tail -n 1 | sed "s|^|$backup_dir/|"
+}
+
+prune() {
+  find "$backup_dir" -maxdepth 1 -type f -printf '%f\n' | sort | head -n "-$keep" | while read -r old; do
+    rm -f -- "$backup_dir/$old"
+  done
+}
+
+# Copies the current file into the backup dir; a missing file is recorded as
+# an empty `.absent` backup so restoring it removes the file again.
+backup() {
+  local suffix=${1:-} real dest
+  real=$(real_target)
+  mkdir -p "$backup_dir"
+  dest="$backup_dir/$(basename "$target").$(stamp)"
+  if [[ -e $real ]]; then
+    cp -p -- "$real" "$dest$suffix"
+    dest+=$suffix
+  else
+    : >"$dest.absent$suffix"
+    dest+=".absent$suffix"
+  fi
+  prune
+  printf '%s\n' "$dest"
+}
+
+# Atomically replaces the target with the file at $1.
+replace() {
+  local src=$1 real tmp
+  real=$(real_target)
+  mkdir -p "$(dirname "$real")"
+  tmp=$(mktemp "$(dirname "$real")/.$(basename "$real").panorama.XXXXXX")
+  cat -- "$src" >"$tmp"
+  [[ -e $real ]] && chmod --reference="$real" -- "$tmp"
+  mv -f -- "$tmp" "$real"
+}
+
+incoming=""
+trap 'rm -f -- "${incoming:-/nonexistent}"' EXIT
+
+save() {
+  local dest
+  incoming=$(mktemp)
+  cat >"$incoming"
+  [[ -s $incoming ]] || die "refusing to write an empty file"
+  if command -v luac >/dev/null && ! luac -p -- "$incoming" 2>/dev/null; then
+    die "refusing to write invalid Lua: $(luac -p -- "$incoming" 2>&1 | head -n 1)"
+  fi
+  dest=$(backup)
+  replace "$incoming"
+  printf '%s\n' "$dest"
+}
+
+restore() {
+  local src=${1:-$(latest)}
+  [[ -n $src ]] || die "no backups in $backup_dir"
+  [[ -f $src ]] || die "no such backup: $src"
+  backup .before-restore >/dev/null
+  if [[ $src == *.absent ]]; then
+    rm -f -- "$(real_target)"
+  else
+    replace "$src"
+  fi
+  printf '%s\n' "$src"
+}
+
+case "${1:-}" in
+  path) real_target ;;
+  save) save ;;
+  restore) restore "${2:-}" ;;
+  backups)
+    [[ -d $backup_dir ]] && find "$backup_dir" -maxdepth 1 -type f | sort -r
+    ;;
+  *)
+    sed -n '2,10s/^# \{0,1\}//p' "$0" >&2
+    exit 2
+    ;;
+esac

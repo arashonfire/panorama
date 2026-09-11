@@ -1,0 +1,291 @@
+#!/usr/bin/env bash
+# Brightness backend shared by the Panorama app and the brightness keys.
+#
+#   panorama-brightness list                       every monitor: NAME<TAB>BACKEND<TAB>PERCENT
+#   panorama-brightness get [MONITOR]              brightness in percent
+#   panorama-brightness set [MONITOR] VALUE        VALUE: 40% | +5% | 5%-  (prints the new percent)
+#   panorama-brightness sdr [MONITOR] VALUE        SDR brightness of a monitor in HDR (prints it)
+#   panorama-brightness vcp MONITOR CODE [VALUE]   read or set a DDC/CI feature (hex code, e.g. 12)
+#   panorama-brightness caps MONITOR               the monitor's DDC/CI capabilities
+#   panorama-brightness key [--hdr] VALUE          for key bindings: the focused monitor, with an OSD
+#
+# MONITOR defaults to the focused one. Laptop panels use Omarchy's
+# omarchy-brightness-display when it exists (what Omarchy's brightness keys
+# run, so both always agree), else brightnessctl. External monitors use DDC/CI
+# through ddcutil. BACKEND is backlight, ddc or none.
+#
+# In HDR a panel ignores its backlight: the signal itself sets the light, and
+# how bright ordinary (SDR) content looks is Hyprland's `sdrbrightness`
+# (0.5–2). With --hdr, key presses on a monitor in HDR change that instead.
+set -uo pipefail
+
+root=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+cache=${XDG_RUNTIME_DIR:-/tmp}/panorama/ddc
+
+die() {
+  echo "panorama-brightness: $*" >&2
+  exit 1
+}
+
+has() { command -v "$1" >/dev/null; }
+focused() { hyprctl -j monitors | jq -r '.[] | select(.focused) | .name'; }
+internal() { [[ $1 =~ ^(eDP|LVDS|DSI)- ]]; }
+
+# Target percent for "+N%", "N%-" or "N%". Like Omarchy, ±5 steps move by 1 at
+# or below 5 %, and nothing goes below 1 %. Mirrors lib/brightness.js `target`.
+step() {
+  local now=$1 spec=$2 n t
+  case $spec in
+    +*)
+      n=${spec#+}
+      n=${n%\%}
+      [[ $n =~ ^[0-9]+$ ]] || return 1
+      if ((n == 5 && now < 5)); then t=$((now + 1)); else t=$((now + n)); fi
+      ;;
+    *%-)
+      n=${spec%\%-}
+      [[ $n =~ ^[0-9]+$ ]] || return 1
+      if ((n == 5 && now <= 5)); then t=$((now - 1)); else t=$((now - n)); fi
+      ;;
+    *)
+      n=${spec%\%}
+      [[ $n =~ ^[0-9]+$ ]] || return 1
+      t=$n
+      ;;
+  esac
+  ((t < 1)) && t=1
+  ((t > 100)) && t=100
+  echo "$t"
+}
+
+# --- backlight (laptop panels) ------------------------------------------------
+
+backlight_device() {
+  if has omarchy-hw-display; then
+    omarchy-hw-display
+    return
+  fi
+  ls -1 /sys/class/backlight 2>/dev/null | grep -vx appletb_backlight | head -n 1
+}
+
+backlight_get() {
+  if has omarchy-brightness-display; then
+    omarchy-brightness-display --monitor "$1"
+    return
+  fi
+  local dev
+  dev=$(backlight_device)
+  [[ -n $dev ]] || return 1
+  brightnessctl -m -d "$dev" 2>/dev/null | awk -F, '{ gsub("%", "", $4); print $4 }'
+}
+
+backlight_set() {
+  local mon=$1 spec=$2 now target dev
+  now=$(backlight_get "$mon") || return 1
+  target=$(step "$now" "$spec") || return 1
+  if has omarchy-brightness-display; then
+    # Relative steps keep Omarchy's own rounding; absolute ones are clamped here.
+    [[ $spec == +* || $spec == *%- ]] || spec="$target%"
+    omarchy-brightness-display --no-osd --monitor "$mon" "$spec" >/dev/null || return 1
+  else
+    dev=$(backlight_device)
+    [[ -n $dev ]] || return 1
+    brightnessctl -q -d "$dev" set "$target%" || return 1
+  fi
+  backlight_get "$mon"
+}
+
+# --- DDC/CI (external monitors) -----------------------------------------------
+
+# The monitor's I2C bus, cached; a monitor without DDC/CI is re-checked after 60 s.
+ddc_bus() {
+  local mon=$1 file bus stamp
+  file=$cache/${mon//[^[:alnum:]_.-]/_}.bus
+  if [[ -r $file ]]; then
+    read -r bus stamp <"$file"
+    if [[ $bus == none ]]; then
+      (($(date +%s) - ${stamp:-0} < 60)) && return 1
+    elif [[ $bus =~ ^[0-9]+$ ]]; then
+      echo "$bus"
+      return 0
+    fi
+  fi
+  has ddcutil || return 1
+  mkdir -p "$cache"
+  bus=$(ddcutil --skip-ddc-checks detect --brief 2>/dev/null | awk -v mon="$mon" '
+    /I2C bus:/ { bus = $NF; sub(/^.*\/i2c-/, "", bus) }
+    /DRM[_ ]connector:/ {
+      c = $NF
+      sub(/^card[0-9]+-/, "", c)
+      if (c == mon && bus != "") { print bus; exit }
+      bus = ""
+    }')
+  if [[ $bus =~ ^[0-9]+$ ]]; then
+    echo "$bus" >"$file"
+    echo "$bus"
+  else
+    echo "none $(date +%s)" >"$file"
+    return 1
+  fi
+}
+
+ddc() {
+  local bus=$1
+  shift
+  ddcutil --bus "$bus" --skip-ddc-checks "$@" 2>/dev/null
+}
+
+# "cur max" of VCP 10 (brightness).
+ddc_read_brightness() {
+  local bus
+  bus=$(ddc_bus "$1") || return 1
+  ddc "$bus" getvcp 10 --brief | awk '$1 == "VCP" && toupper($2) == "10" && $3 == "C" && $5 > 0 { print $4, $5; found = 1; exit } END { exit !found }'
+}
+
+ddc_get() {
+  local cur max
+  read -r cur max < <(ddc_read_brightness "$1") || return 1
+  [[ -n ${max:-} ]] || return 1
+  echo $(((cur * 100 + max / 2) / max))
+}
+
+ddc_set() {
+  local mon=$1 spec=$2 cur max now target bus
+  read -r cur max < <(ddc_read_brightness "$mon") || return 1
+  [[ -n ${max:-} ]] || return 1
+  now=$(((cur * 100 + max / 2) / max))
+  target=$(step "$now" "$spec") || return 1
+  bus=$(ddc_bus "$mon") || return 1
+  ddc "$bus" setvcp 10 $(((target * max + 50) / 100)) >/dev/null || return 1
+  echo "$target"
+}
+
+# --- HDR: SDR brightness --------------------------------------------------------
+
+live() { hyprctl -j monitors | jq -r --arg m "$1" ".[] | select(.name == \$m) | $2"; }
+in_hdr() { [[ $(live "$1" .colorManagementPreset) == hdr* ]]; }
+
+# SDR brightness for "+N%" / "N%-" (±N/100), "N%" (of the 0.5–2 range) or a
+# multiplier like 1.2 / 1.2x / 2x, within 0.5–2. Mirrors lib/brightness.js `sdrStep`.
+sdr_target() {
+  awk -v c="$1" -v s="$2" 'BEGIN {
+    if (s ~ /^\+[0-9]+%?$/) { gsub(/[+%]/, "", s); v = c + s / 100 }
+    else if (s ~ /^[0-9]+%-$/) { gsub(/%-/, "", s); v = c - s / 100 }
+    else if (s ~ /^([0-9]*\.[0-9]+|[0-9]+(\.[0-9]+)?)x$/ || s ~ /^[0-9]*\.[0-9]+$/) { gsub(/x/, "", s); v = s + 0 }
+    else if (s ~ /^[0-9]+%?$/) { gsub(/%/, "", s); if (s > 100) s = 100; v = 0.5 + 1.5 * s / 100 }
+    else exit 1
+    if (v < 0.5) v = 0.5
+    if (v > 2) v = 2
+    printf "%.2f\n", v
+  }'
+}
+
+# Through a running Panorama (it sends a complete rule and knows what was
+# asked for). Without it, a partial rule that Hyprland merges into the
+# monitor's rule of the same name, which Panorama's saved section provides;
+# a monitor without one is left alone, since a new rule would start from
+# Hyprland's defaults.
+sdr_set() {
+  local mon=$1 spec=$2 value current
+  [[ $mon =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  value=$(qs -p "$root" ipc call panorama stepSdrBrightness "$mon" "$spec" 2>/dev/null)
+  if [[ $value =~ ^[0-9.]+$ ]]; then
+    echo "$value"
+    return 0
+  fi
+  grep -q "^hl\.monitor({ output = \"$mon\"" "$("$root/bin/panorama-persist" path)" 2>/dev/null || return 1
+  current=$(live "$mon" .sdrBrightness)
+  value=$(sdr_target "$current" "$spec") || return 1
+  [[ $(hyprctl eval "hl.monitor({ output = \"$mon\", sdrbrightness = $value })") == ok ]] || return 1
+  echo "$value"
+}
+
+# --- dispatch -------------------------------------------------------------------
+
+get() {
+  if internal "$1"; then backlight_get "$1"; else ddc_get "$1"; fi
+}
+
+set_brightness() {
+  if internal "$1"; then backlight_set "$1" "$2"; else ddc_set "$1" "$2"; fi
+}
+
+list() {
+  local mon p backend
+  hyprctl -j monitors | jq -r '.[].name' | while read -r mon; do
+    backend=ddc
+    internal "$mon" && backend=backlight
+    p=$(get "$mon" 2>/dev/null)
+    [[ $p =~ ^[0-9]+$ ]] || { backend=none; p=-; }
+    printf '%s\t%s\t%s\n' "$mon" "$backend" "$p"
+  done
+}
+
+osd() {
+  local percent=$1 message=${2:-}
+  if has omarchy-osd; then
+    local args=(-i brightness -p "$percent")
+    [[ -n $message ]] && args+=(-m "$message")
+    omarchy-osd "${args[@]}" >/dev/null 2>&1 && return
+  fi
+  has notify-send && notify-send -a Panorama -t 1200 -h int:value:"$percent" \
+    -h string:x-canonical-private-synchronous:panorama-brightness "${message:-Brightness}" "$percent%"
+}
+
+key() {
+  local hdr=0 spec mon value percent
+  [[ ${1:-} == --hdr ]] && { hdr=1; shift; }
+  spec=${1:-}
+  [[ -n $spec ]] || die "key needs a value, e.g. +5%"
+  mon=$(focused)
+  [[ -n $mon ]] || die "no focused monitor"
+
+  # Drop overlapping key repeats instead of racing them.
+  exec {lock}>"${XDG_RUNTIME_DIR:-/tmp}/panorama-brightness.lock"
+  flock -n "$lock" || exit 0
+
+  if ((hdr)) && in_hdr "$mon"; then
+    if value=$(sdr_set "$mon" "$spec"); then
+      percent=$(awk -v v="$value" 'BEGIN { printf "%d", (v - 0.5) / 1.5 * 100 + 0.5 }')
+      osd "$percent" "SDR brightness ${value}×"
+      return
+    fi
+  fi
+
+  percent=$(set_brightness "$mon" "$spec") || die "can't change the brightness of $mon"
+  osd "$percent"
+}
+
+cmd=${1:-}
+shift || true
+case $cmd in
+  list) list ;;
+  get)
+    p=$(get "${1:-$(focused)}") || die "can't read the brightness of ${1:-the focused monitor}"
+    echo "$p"
+    ;;
+  set)
+    if (($# >= 2)); then mon=$1 value=$2; else mon=$(focused) value=${1:-}; fi
+    [[ -n $value ]] || die "set needs a value"
+    set_brightness "$mon" "$value" || die "can't change the brightness of $mon"
+    ;;
+  sdr)
+    if (($# >= 2)); then mon=$1 value=$2; else mon=$(focused) value=${1:-}; fi
+    in_hdr "$mon" || die "$mon isn't in HDR"
+    sdr_set "$mon" "$value" || die "can't change the SDR brightness of $mon"
+    ;;
+  vcp)
+    (($# >= 2)) || die "vcp needs a monitor and a feature code"
+    bus=$(ddc_bus "$1") || die "$1 doesn't answer DDC/CI"
+    if (($# >= 3)); then ddc "$bus" setvcp "$2" "$3"; else ddc "$bus" getvcp "$2" --brief; fi
+    ;;
+  caps)
+    bus=$(ddc_bus "${1:?caps needs a monitor}") || die "$1 doesn't answer DDC/CI"
+    ddc "$bus" capabilities
+    ;;
+  key) key "$@" ;;
+  *)
+    sed -n '2,19s/^# \{0,1\}//p' "$0" >&2
+    exit 2
+    ;;
+esac
