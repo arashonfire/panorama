@@ -80,6 +80,18 @@ Singleton {
     set(name, { x: Math.round(x), y: Math.round(y) })
   }
 
+  // Keyboard move: shift the monitor by (dx, dy) logical px, then settle it
+  // flush against its neighbours, like a drop on the canvas.
+  function nudge(name, dx, dy) {
+    var cfg = config(name)
+    if (!cfg || !D.isPlaced(cfg)) return
+    var r = D.rect(cfg)
+    r.x += dx
+    r.y += dy
+    var pos = L.settle(r, placedRects(name))
+    move(name, pos.x, pos.y)
+  }
+
   function setEnabled(name, on) {
     var cfg = config(name)
     if (!cfg) return

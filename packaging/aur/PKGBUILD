@@ -1,0 +1,65 @@
+# Maintainer: Arash <arash@duck.com>
+#
+# Panorama: display settings for Hyprland (Quickshell app).
+# Builds from git. Set _repo to the published repository before submitting to
+# the AUR; for a local test build: PANORAMA_REPO=/path/to/checkout makepkg -si
+
+pkgname=panorama-git
+_name=panorama
+pkgver=r0
+pkgrel=1
+pkgdesc='Display settings for Hyprland: arrange monitors, resolution, scaling, HDR, VRR, brightness, profiles'
+arch=('any')
+url='https://github.com/CHANGEME/panorama'
+license=('LicenseRef-unknown')  # TODO: choose a license and add a LICENSE file before publishing
+depends=(
+  'hyprland'     # Lua config (0.56+)
+  'quickshell'   # qs 0.3+
+  'jq'
+  'lua'          # luac checks monitors.lua before it is replaced
+  'gawk'
+  'util-linux'   # flock
+)
+optdepends=(
+  'v4l-utils: EDID details (edid-decode), HDR luminance from the panel'
+  'ddcutil: brightness and DDC/CI controls for external monitors'
+  'brightnessctl: backlight control outside Omarchy'
+  'libnotify: brightness notifications outside Omarchy'
+)
+makedepends=('git')
+provides=("$_name")
+conflicts=("$_name")
+_repo=${PANORAMA_REPO:-$url.git}
+source=("$_name::git+$_repo")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$_name"
+  printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+}
+
+check() {
+  cd "$_name"
+  if command -v node >/dev/null; then
+    node --test tests/
+  fi
+}
+
+package() {
+  cd "$_name"
+  local share="$pkgdir/usr/share/$_name"
+
+  install -d "$share"
+  cp -r --no-preserve=ownership shell.qml services lib ui bin "$share/"
+  chmod 755 "$share"/bin/*
+
+  # Symlink: the launcher finds the app next to its real path.
+  install -d "$pkgdir/usr/bin"
+  ln -s "/usr/share/$_name/bin/panorama" "$pkgdir/usr/bin/panorama"
+
+  install -Dm644 share/applications/panorama.desktop "$pkgdir/usr/share/applications/panorama.desktop"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$_name/README.md"
+  if [[ -f LICENSE ]]; then
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  fi
+}

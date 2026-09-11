@@ -65,6 +65,7 @@ tests/e2e/save.sh                  # save + undo against a scratch copy of monit
 tests/e2e/color.sh [MONITOR]       # 10-bit, HDR, VRR on a real monitor (reverted; flickers)
 tests/e2e/brightness.sh [MONITOR]  # brightness backend, app ↔ keys sync, HDR-aware keys (restored)
 tests/e2e/profiles.sh              # live profile switching on a headless output (file untouched)
+tests/e2e/nudge.sh                 # keyboard move (Alt+arrows) on a headless output (draft only)
 bin/panorama --brightness +5%      # what a brightness key binding runs (see Brightness below)
 ```
 
@@ -80,8 +81,21 @@ qs -p /path/to/panorama ipc call panorama state      # JSON: phase, changes, err
 Saving from scripts: `ipc call panorama preview` prints the section,
 `save` writes it, `undoSave` restores the previous file.
 
-Keys: ←/→ select a display, I identify, Ctrl+Enter apply, Ctrl+S save,
-Ctrl+R refresh, Esc close. While confirming: Enter keeps, Esc reverts.
+Keys (press **?** or F1 in the app for this list):
+
+| Key | Does |
+|---|---|
+| ← → ↑ ↓ | select the previous / next display |
+| Alt + arrows | move the selected display 100 px (Shift + Alt: 10 px); it stays flush with its neighbours |
+| Tab / Shift + Tab | move between controls (focused control has an accent outline) |
+| Space / Enter | press a button, open a list, flip a switch; ← → on a slider |
+| Ctrl + 1 … 4 | Settings, Color, Details, Global tab |
+| Ctrl + Enter | apply |
+| Enter / Esc | keep / revert while a change waits for confirmation |
+| Ctrl + S / Ctrl + P | Save… / Profiles… |
+| I | identify displays |
+| Ctrl + R | refresh |
+| Esc | close a dialog, or Panorama |
 
 Suggested Hyprland binding (Omarchy `~/.config/hypr/bindings.lua`):
 
@@ -250,31 +264,65 @@ setup that uses the Lua config. On Omarchy it also:
   (with a neutral fallback everywhere else);
 - stays compatible with Omarchy's monitor scripts (see *The managed block*);
 - sits alongside Omarchy's bar **Display** panel (quick brightness and scale)
-  without replacing it. Panorama is the "full settings" view and can be linked
-  from the Omarchy menu.
+  without replacing it. Panorama is the "full settings" view.
+
+**Omarchy menu.** Add an entry under Setup (next to Monitors, which still
+opens `monitors.lua` in the editor) in `~/.config/omarchy/extensions/omarchy-menu.jsonc`;
+the menu reloads on save:
+
+```jsonc
+"setup.panorama": {"icon":"󰍹","label":"Display Settings","description":"Panorama: monitors, HDR, VRR, brightness, profiles","aliases":["panorama"],"action":"panorama"}
+```
+
+`omarchy menu summon panorama` then opens it directly.
+
+**Scale hotkeys (SUPER + / and SUPER + ALT + /).** Omarchy's
+`omarchy-hyprland-monitor-scaling` changes the scale live and records it in
+`monitors.lua` *outside* Panorama's section, which loads later and wins. So a
+hotkey change works until the next reload or login, then the saved scale comes
+back. Panorama notices the difference (status **Not saved**, and the new
+scale shows as the current one); press **Save…** to keep it. The hotkey also
+resets the position to `auto`, which Save pins back to real coordinates.
 
 ## Project layout
 
 ```
 shell.qml                 entry point: window, keys, IPC, per-screen overlays
-services/Hypr.qml         live monitor state (hyprctl JSON + events + poll)
-services/Theme.qml        Omarchy-aware colors, type scale, rounding
-lib/monitor.js            pure helpers: layout math, formatting, inspector data
-ui/LayoutCanvas.qml       scaled layout + "Not in layout" tray
-ui/MonitorTile.qml        one monitor on the canvas
-ui/Inspector.qml          details panel (ui/InfoSection.qml rows)
-ui/IdentifyOverlay.qml    numbered card per screen
-ui/PButton.qml            themed button
-bin/panorama              launcher (float rule, single instance, IPC)
+
+services/                 singletons
+  Hypr.qml                live monitor state (hyprctl JSON + events + poll)
+  Draft.qml               pending edits over the live state
+  Apply.qml               apply → confirm → keep/revert, SDR brightness queue
+  Persist.qml             managed section: parse, save, undo, profiles
+  Brightness.qml          backlight / DDC values via bin/panorama-brightness
+  Edid.qml, Globals.qml   EDID summaries, global options
+  Theme.qml, Command.qml  Omarchy-aware look; process runner
+
+lib/                      pure JS (unit tested with node)
+  monitor.js layout.js scale.js     layout math, snapping, clean scales
+  draft.js                          live ↔ draft ↔ rule, validation
+  lua.js block.js match.js          Lua serialization, managed section, desc: matching
+  profiles.js                       profile handler Lua + helpers
+  edid.js globals.js brightness.js
+
+ui/
+  LayoutCanvas.qml MonitorTile.qml  drag-to-arrange canvas
+  Inspector.qml                     Settings / Color / Details / Global tabs
+  SettingsPanel.qml ColorPanel.qml GlobalPanel.qml InfoSection.qml
+  ActionBar.qml BrightnessStrip.qml
+  SaveDialog.qml ProfilesDialog.qml KeysHelp.qml
+  ConfirmOverlay.qml IdentifyOverlay.qml   per-screen layer-shell overlays
+  PButton Toggle Dropdown Segmented Slider NumberField TextField SettingRow SectionHeader
+
+bin/panorama              launcher (float rule, single instance, IPC, --revert, --brightness)
+bin/panorama-persist      backup + atomic write + restore of monitors.lua
+bin/panorama-brightness   backlight / DDC / HDR SDR brightness; key handler
 share/applications/       desktop entry
 install.sh                per-user install into ~/.local
-tests/                    node tests + real hyprctl fixture
+tests/                    node unit tests, fixtures, e2e scripts
 spikes/                   Phase 0 experiments (see PLAN.md)
+docs/upstream/            draft bug reports for Hyprland
 ```
-
-Still to come: `services/` Draft, Persist, Edid, Brightness; `lib/`
-Lua serialization, scale validity, managed-block editing; editor sections and
-dialogs in `ui/`.
 
 ## Safety principles
 

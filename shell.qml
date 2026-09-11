@@ -14,6 +14,8 @@ ShellRoot {
   property bool identifying: false
   property bool saveDialogOpen: false
   property bool profilesOpen: false
+  property bool helpOpen: false
+  readonly property bool dialogOpen: saveDialogOpen || profilesOpen || helpOpen
   readonly property var selected: Hypr.byName(selectedName)
   // Something to save: live changes, or the file doesn't match the live state.
   readonly property bool canOpenSave: Persist.canSave && (Apply.liveUnsaved || !Persist.saved)
@@ -70,6 +72,7 @@ ShellRoot {
     function setTransform(name: string, transform: int): void { Draft.setTransform(name, transform) }
     function setMirror(name: string, target: string): void { Draft.setMirror(name, target) }
     function move(name: string, x: int, y: int): void { Draft.move(name, x, y) }
+    function nudge(name: string, dx: int, dy: int): void { Draft.nudge(name, dx, dy) }
     function setColor(name: string, key: string, value: string): void { Draft.setColorFromString(name, key, value) }
     function setGlobal(key: string, value: string): void { Draft.setGlobalFromString(key, value) }
     function setBrightness(name: string, percent: int): void { Brightness.set(name, percent) }
@@ -111,12 +114,20 @@ ShellRoot {
         issues: Apply.issues,
         liveUnsaved: Apply.liveUnsaved,
         changes: Draft.changes,
+        draft: Draft.pending.map(function (c) { return { name: c.name, enabled: c.enabled, mirror: c.mirror, x: c.x, y: c.y } }),
         globalChanges: Draft.globalLines,
         errors: Draft.errors,
         appliedRules: Apply.appliedRules,
         appliedGlobals: Apply.appliedGlobals,
         globals: Globals.values,
         brightness: Brightness.values,
+        ui: {
+          selected: shell.selectedName,
+          tab: inspector.tab,
+          help: shell.helpOpen,
+          save: shell.saveDialogOpen,
+          profiles: shell.profilesOpen
+        },
         persist: {
           path: Persist.path,
           state: Persist.state,
@@ -157,19 +168,31 @@ ShellRoot {
       focus: true
 
       Keys.onPressed: event => {
+        var key = event.key
         var ctrl = event.modifiers & Qt.ControlModifier
-        var enter = event.key === Qt.Key_Return || event.key === Qt.Key_Enter
+        var alt = event.modifiers & Qt.AltModifier
+        var shift = event.modifiers & Qt.ShiftModifier
+        var enter = key === Qt.Key_Return || key === Qt.Key_Enter
+        var arrow = key === Qt.Key_Left ? [-1, 0] : key === Qt.Key_Right ? [1, 0]
+                  : key === Qt.Key_Up ? [0, -1] : key === Qt.Key_Down ? [0, 1] : null
         if (Apply.state === "confirming") {
           if (enter) Apply.keep()
-          else if (event.key === Qt.Key_Escape) Apply.revert()
+          else if (key === Qt.Key_Escape) Apply.revert()
           else return
-        } else if (event.key === Qt.Key_Escape) Apply.quit()
+        } else if (key === Qt.Key_Escape) Apply.quit()
         else if (enter && ctrl) Apply.apply()
-        else if (event.key === Qt.Key_S && ctrl) { if (shell.canOpenSave) shell.saveDialogOpen = true }
-        else if (event.key === Qt.Key_Left || event.key === Qt.Key_Up) shell.selectRelative(-1)
-        else if (event.key === Qt.Key_Right || event.key === Qt.Key_Down) shell.selectRelative(1)
-        else if (event.key === Qt.Key_I) shell.identify()
-        else if (event.key === Qt.Key_R && ctrl) Hypr.refresh()
+        else if (key === Qt.Key_S && ctrl) { if (shell.canOpenSave) shell.saveDialogOpen = true }
+        else if (key === Qt.Key_P && ctrl) shell.profilesOpen = true
+        else if (ctrl && key >= Qt.Key_1 && key <= Qt.Key_4) inspector.tab = ["settings", "color", "details", "global"][key - Qt.Key_1]
+        else if (arrow && alt) {
+          var stepPx = shift ? 10 : 100
+          if (Apply.state === "idle") Draft.nudge(shell.selectedName, arrow[0] * stepPx, arrow[1] * stepPx)
+        }
+        else if (key === Qt.Key_Left || key === Qt.Key_Up) shell.selectRelative(-1)
+        else if (key === Qt.Key_Right || key === Qt.Key_Down) shell.selectRelative(1)
+        else if (key === Qt.Key_I && !ctrl) shell.identify()
+        else if (key === Qt.Key_R && ctrl) Hypr.refresh()
+        else if (key === Qt.Key_Question || key === Qt.Key_F1) shell.helpOpen = true
         else return
         event.accepted = true
       }
@@ -178,6 +201,8 @@ ShellRoot {
         anchors.fill: parent
         anchors.margins: Theme.space.xl
         spacing: Theme.space.lg
+        // Keep Tab inside an open dialog.
+        enabled: !shell.dialogOpen
 
         RowLayout {
           Layout.fillWidth: true
@@ -321,11 +346,20 @@ ShellRoot {
           }
 
           Text {
-            text: "←/→ select · I identify · Ctrl+Enter apply · Ctrl+S save · Esc close"
+            text: "? shortcuts · Ctrl+Enter apply · Ctrl+S save · Esc close"
             color: Theme.muted
             font.family: Theme.fontFamily
             font.pixelSize: Theme.font.caption
           }
+        }
+      }
+
+      KeysHelp {
+        anchors.fill: parent
+        open: shell.helpOpen
+        onDismissed: {
+          shell.helpOpen = false
+          main.forceActiveFocus()
         }
       }
 

@@ -111,8 +111,8 @@ Source references are Hyprland v0.56.2.
       our rule too, but resets `position` to `auto`. It persists by editing
       `local omarchy_monitor_scale` / the catch-all, which our block overrides,
       so a hotkey change won't survive a reload while Panorama manages that
-      monitor. → Phase 7: document this, or offer to sync the hotkey result back
-      into the block.
+      monitor. → Phase 7: documented (README, *Omarchy integration*): Panorama
+      shows "Not saved" after a hotkey change and Save keeps it.
 - [x] `omarchy refresh hyprland` resets `monitors.lua`, including our block, after
       taking a backup. → `panorama --revert` should also be able to restore
       from Panorama's own backups.
@@ -452,18 +452,37 @@ Not done / not tested:
 
 ## Phase 7: Polish
 
-- [ ] Full keyboard navigation, accessible labels
-- [ ] Omarchy menu entry and bar-widget launch hook
-- [ ] Omarchy scale hotkeys: document the interplay, or sync hotkey changes back
-      into the managed block
-- [ ] Upstream Hyprland reports (repro: `spikes/vrr.sh`):
-      `CMonitorRule::compare()` ignores `m_vrr`; `ensureVRR` sets `m_vrrActive`
-      even when adaptive sync was rejected
+- [x] Keyboard navigation: Tab order through every control with an accent
+      focus outline (buttons, switches, lists, sliders, fields); Ctrl+1…4 tabs;
+      Ctrl+P profiles; Alt+arrows move the selected display (100 px, Shift 10 px)
+      through `Draft.nudge`, which settles it flush like a drop; ? / F1 shortcut
+      sheet (`ui/KeysHelp.qml`). Dialogs disable the window behind them so Tab
+      stays inside. Accessible roles and names on all controls.
+- [x] Omarchy menu entry: additive `setup.panorama` ("Display Settings") in
+      `~/.config/omarchy/extensions/omarchy-menu.jsonc`; the stock Monitors
+      entry is untouched.
+- [x] ~~Bar-widget launch hook~~: skipped. It would mean cloning Omarchy's
+      Display plugin and maintaining the fork; the menu entry and a keybinding
+      cover it.
+- [x] Omarchy scale hotkeys: documented (README). Syncing hotkey changes back
+      automatically would mean Panorama writing the file behind the user's back.
+- [x] Upstream Hyprland reports drafted in `docs/upstream/` (not filed; filing
+      is the maintainer's call):
+      `hyprland-vrr-only-rule-ignored.md` (`CMonitorRule::compare()` ignores
+      `m_vrr`), `hyprland-vrr-active-when-refused.md` (`ensureVRR` sets
+      `m_vrrActive` when adaptive sync was rejected),
+      `hdr-displayid-cta-not-detected.md` (HDR metadata / BT.2020 inside a
+      DisplayID extension's CTA block not picked up, Samsung ATNA60HS01)
 - [ ] Investigate (Hyprland / NVIDIA): after repeated HDR ↔ sRGB switches the
       OLED stayed in HDR mode (backlight ignored) while Hyprland reported
       sRGB; one more HDR on/off cleared it. Needs a reliable repro first.
-- [ ] Upstream (Hyprland / libdisplay-info): HDR static metadata and BT.2020
-      colorimetry inside a DisplayID extension's CTA block aren't picked up
-      (Samsung ATNA60HS01), so HDR needs `supports_hdr` + `supports_wide_color`
-      forced (fixture: `tests/fixtures/edid-edp.txt`)
 - [ ] Packaging (AUR `PKGBUILD` for `panorama`), screenshots, docs
+
+Findings:
+- Keyboard move can't jump a display to another side of its neighbour: a step
+  that leaves a gap settles back flush. Sliding along the shared edge works;
+  bigger moves are a drag.
+- Quickshell hot reload doesn't refresh `IpcHandler` functions: a new or
+  changed IPC function needs a restart (`panorama --quit`, then `panorama`).
+- Verified with `wtype` against the real window: Ctrl+1/2, F1, Esc and Ctrl+P
+  do what the sheet says; `tests/e2e/nudge.sh` covers Alt+arrows.

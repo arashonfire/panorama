@@ -23,6 +23,7 @@ Rectangle {
     id: input
     anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: Theme.space.md }
     clip: true
+    activeFocusOnTab: true
     selectByMouse: true
     color: Theme.foreground
     selectionColor: Theme.alpha(Theme.accent, 0.35)
