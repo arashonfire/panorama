@@ -340,4 +340,4 @@ docs/upstream/            draft bug reports for Hyprland
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE). © 2026 Arash, [arashlab.com](https://arashlab.com).
