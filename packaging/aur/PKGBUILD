@@ -1,8 +1,7 @@
-# Maintainer: Arash <arash@duck.com>
+# Maintainer: Arash <info@arashlab.com>
 #
 # Panorama: display settings for Hyprland (Quickshell app).
-# Builds from git. Set _repo to the published repository before submitting to
-# the AUR; for a local test build (committed HEAD only):
+# Builds from git. For a local test build (committed HEAD only):
 #   PANORAMA_REPO=file:///path/to/checkout makepkg -si
 
 pkgname=panorama-git
@@ -11,7 +10,7 @@ pkgver=r0
 pkgrel=1
 pkgdesc='Display settings for Hyprland: arrange monitors, resolution, scaling, HDR, VRR, brightness, profiles'
 arch=('any')
-url='https://github.com/CHANGEME/panorama'
+url='https://arashlab.com/apps/panorama'
 license=('MIT')
 depends=(
   'hyprland'     # Lua config (0.56+)
@@ -30,7 +29,7 @@ optdepends=(
 makedepends=('git')
 provides=("$_name")
 conflicts=("$_name")
-_repo=${PANORAMA_REPO:-$url.git}
+_repo=${PANORAMA_REPO:-https://github.com/arashonfire/panorama.git}
 source=("$_name::git+$_repo")
 sha256sums=('SKIP')
 
