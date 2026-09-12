@@ -75,16 +75,23 @@ const ports = (list) => list.map((c) => JSON.stringify(c)).join(", ");
 
 // `connected` is the plugged-in ports and `disconnected` the ports the kernel
 // knows but reports empty; an output in neither is virtual (hyprctl output
-// create), which the handler must not mistake for unplugged. The `*After`
-// options change what Hyprland and sysfs report before `event` fires, the way a
-// hot-plug, an unplug or a turned-off monitor would.
-function runHandler({ enabled, connected, disconnected, lidClosed, panelOff, profiles, base, event,
-                     enabledAfter, connectedAfter, disconnectedAfter }) {
+// create), which the handler must not mistake for unplugged. `steps` fire
+// events in turn, each changing what Hyprland and sysfs report first, the way
+// a hot-plug, an unplug or a turned-off monitor would (`event` plus the
+// `*After` options is a single step). The result is what the last step applied:
+// rules | workspace rules | handlers registered | toggle files written (+) and
+// removed (-), a write with the wrong bytes reported as +BAD:…
+// Each step happens `after` seconds later (default 2; 0 is the same second).
+function runHandler({ enabled, connected, disconnected, lidClosed, panelOff, offOmarchy, profiles, base, event,
+                     enabledAfter, connectedAfter, disconnectedAfter, steps }) {
+  steps = steps || (event ? [{ event, enabledAfter, connectedAfter, disconnectedAfter }] : []);
   const stub = `
-    local applied, ws, handlers = {}, {}, {}
+    local applied, ws, handlers, changes, clock = {}, {}, {}, {}, 1000
+    os.time = function() return clock end
     local enabled = { ${mons(enabled)} }
     local connected = { ${ports(connected)} }
     local disconnected = { ${ports(disconnected || [])} }
+    local flags = { clamshell = ${lidClosed ? "true" : "false"}, disable = ${panelOff ? "true" : "false"} }
     hl = {
       get_monitors = function() return enabled end,
       monitor = function(r) applied[#applied + 1] = r.output .. (r.disabled and "(off)" or "") end,
@@ -96,25 +103,45 @@ function runHandler({ enabled, connected, disconnected, lidClosed, panelOff, pro
       for _, n in ipairs(connected) do lines[#lines + 1] = n .. " connected" end
       for _, n in ipairs(disconnected) do lines[#lines + 1] = n .. " disconnected" end
       return { lines = function() return function() i = i + 1 return lines[i] end end, close = function() end } end
-    local removed = {}
-    os.remove = function(path) removed[#removed + 1] = path:match("[^/]+$") or path return true end
+    local function which(path)
+      if path:match("clamshell") then return "clamshell" end
+      if path:match("internal%-monitor%-disable") then return "disable" end
+    end
+    os.remove = function(path)
+      local flag = which(path)
+      if flag then flags[flag] = false end
+      changes[#changes + 1] = "-" .. (path:match("[^/]+$") or path)
+      return true
+    end
+    os.rename = function() return ${offOmarchy ? "nil" : "true"} end
+    os.execute = function(cmd) changes[#changes + 1] = "$" .. cmd end
     local real_open = io.open
-    io.open = function(path)
-      if path:match("clamshell") then return ${lidClosed ? "{ close = function() end }" : "nil"} end
-      if path:match("internal%-monitor%-disable") then return ${panelOff ? "{ close = function() end }" : "nil"} end
-      return real_open(path) end
+    io.open = function(path, mode)
+      local flag = which(path)
+      if not flag then return real_open(path, mode) end
+      if mode == "w" then
+        return { write = function(_, s)
+          flags[flag] = true
+          local name = path:match("[^/]+$")
+          if s == 'hl.monitor({ output = "eDP-1", disabled = true })\\n' then changes[#changes + 1] = "+" .. name
+          else changes[#changes + 1] = "+BAD:" .. s end
+        end, close = function() end }
+      end
+      if flags[flag] then return { close = function() end } end
+      return nil
+    end
     os.getenv = function() return "/home/test" end
   `;
   const body = P.render(profiles, base).join("\n");
-  const after = `
-    ${event ? `
-      ${enabledAfter ? `enabled = { ${mons(enabledAfter)} }` : ""}
-      ${connectedAfter ? `connected = { ${ports(connectedAfter)} }` : ""}
-      ${disconnectedAfter ? `disconnected = { ${ports(disconnectedAfter)} }` : ""}
-      applied, ws = {}, {}
-      handlers[${JSON.stringify(event)}]()` : ""}
+  const after = steps.map((step) => `
+      clock = clock + ${step.after === undefined ? 2 : step.after}
+      ${step.enabledAfter ? `enabled = { ${mons(step.enabledAfter)} }` : ""}
+      ${step.connectedAfter ? `connected = { ${ports(step.connectedAfter)} }` : ""}
+      ${step.disconnectedAfter ? `disconnected = { ${ports(step.disconnectedAfter)} }` : ""}
+      applied, ws, changes = {}, {}, {}
+      handlers[${JSON.stringify(step.event)}]()`).join("\n") + `
     io.write(table.concat(applied, ",") .. "|" .. table.concat(ws, ",") .. "|" .. (handlers["monitor.added"] and "on" or "off")
-      .. (#removed > 0 and ("|" .. table.concat(removed, ",")) or ""))
+      .. (#changes > 0 and ("|" .. table.concat(changes, ",")) or ""))
   `;
   const out = spawnSync(lua, ["-"], { input: stub + body + after, encoding: "utf8" });
   assert.equal(out.status, 0, out.stderr);
@@ -130,8 +157,9 @@ test("generated Lua picks the matching profile, else the base rules", { skip: !l
   assert.equal(runHandler({ enabled: both, connected: ["eDP-1", "DP-2"], profiles: [withWs], base }),
     "eDP-1,desc:Dell Inc. DELL U2723QE ABC123|1@desc:Dell Inc. DELL U2723QE ABC123,2@desc:Dell Inc. DELL U2723QE ABC123|on");
   assert.equal(runHandler({ enabled: [{ name: "eDP-1" }], connected: ["eDP-1"], profiles: [withWs], base }), "eDP-1||on", "no match: base");
-  // The panel was turned off by the profile: Lua only sees it in sysfs.
-  assert.equal(runHandler({ enabled: [{ name: "DP-2", description: dell.description }], connected: ["eDP-1", "DP-2"], profiles: [off], base }),
+  // The panel was turned off by the profile: Lua only sees it in sysfs. The
+  // profile's toggle is already there from the last time, so it stays as is.
+  assert.equal(runHandler({ enabled: [{ name: "DP-2", description: dell.description }], connected: ["eDP-1", "DP-2"], panelOff: true, profiles: [off], base }),
     "eDP-1(off),desc:Dell Inc. DELL U2723QE ABC123||on");
   // At startup nothing is enabled yet, but sysfs already knows what's plugged in.
   assert.equal(runHandler({ enabled: [], connected: ["eDP-1", "DP-2"], profiles: [docked], base }),
@@ -186,7 +214,7 @@ test("generated Lua never leaves every display off", { skip: !lua && "no lua int
   // counting, so the rule that enables the panel applies again.
   assert.equal(runHandler({
     enabled: dellOnly, connected: ["eDP-1", "DP-2"], panelOff: true, profiles: [docked], base: on, ...unplug
-  }), "eDP-1||on|internal-monitor-disable.lua", "panel back on, and the toggle cleared so a reload keeps it");
+  }), "eDP-1||on|-internal-monitor-disable.lua", "panel back on, and the toggle cleared so a reload keeps it");
   // Same for Omarchy's clamshell flag, which the lid switch can leave set.
   assert.equal(runHandler({
     enabled: dellOnly, connected: ["eDP-1", "DP-2"], lidClosed: true, profiles: [docked], base: on, ...unplug
@@ -202,11 +230,73 @@ test("generated Lua never leaves every display off", { skip: !lua && "no lua int
   // Counting it as "something else is showing" is what stranded the panel.
   assert.equal(runHandler({
     enabled: dellOnly, connected: ["eDP-1"], disconnected: ["DP-2"], panelOff: true, profiles: [docked], base: on
-  }), "eDP-1||on|internal-monitor-disable.lua", "a stale enabled monitor on an unplugged port does not count");
+  }), "eDP-1||on|-internal-monitor-disable.lua", "a stale enabled monitor on an unplugged port does not count");
 
   // The guard only fires when everything would be off; a normal layout is untouched.
   assert.equal(runHandler({ enabled: [{ name: "eDP-1" }], connected: ["eDP-1"], profiles: [docked], base: on }),
     "eDP-1||on", "no rescue needed");
+});
+
+// A profile that turns the laptop panel off has to hold Omarchy's "laptop
+// display off" toggle itself: its watcher re-enables an unflagged panel within
+// seconds while docked, and its toggle directory loads after monitors.lua. The
+// toggle is dropped with the external (above) and so must come back with it.
+test("generated Lua holds Omarchy's toggle for a profile with the panel off", { skip: !lua && "no lua interpreter" }, () => {
+  const off = { ...docked, name: "Docked, panel off", rules: [{ output: "eDP-1", disabled: true }, DOCKED.rules[1]] };
+  const on = [{ output: "eDP-1", disabled: false }];
+  const both = [{ name: "eDP-1" }, { name: "DP-2", description: dell.description }];
+  const dellOnly = [{ name: "DP-2", description: dell.description }];
+  const flag = "internal-monitor-disable.lua";
+  const written = `$mkdir -p "/home/test/.local/state/omarchy/toggles/hypr",+${flag}`;
+
+  // At load with both connected: the panel goes off and the toggle is written,
+  // byte for byte what Omarchy writes.
+  assert.equal(runHandler({ enabled: both, connected: ["eDP-1", "DP-2"], profiles: [off], base: on }),
+    `eDP-1(off),desc:Dell Inc. DELL U2723QE ABC123||on|${written}`);
+  // Off Omarchy there is no watcher to appease and nothing is written.
+  assert.equal(runHandler({ enabled: both, connected: ["eDP-1", "DP-2"], offOmarchy: true, profiles: [off], base: on }),
+    "eDP-1(off),desc:Dell Inc. DELL U2723QE ABC123||on");
+  // Unplug, then plug the Dell back in: the toggle went with the external and
+  // comes back with the profile, so Omarchy leaves the panel off again.
+  assert.equal(runHandler({
+    enabled: dellOnly, connected: ["eDP-1", "DP-2"], panelOff: true, profiles: [off], base: on,
+    steps: [
+      { event: "monitor.removed", enabledAfter: [], connectedAfter: ["eDP-1"], disconnectedAfter: ["DP-2"] },
+      { event: "monitor.added", enabledAfter: both, connectedAfter: ["eDP-1", "DP-2"], disconnectedAfter: [] }
+    ]
+  }), `eDP-1(off),desc:Dell Inc. DELL U2723QE ABC123||on|${written}`);
+  // The panel going off after that fires monitor.removed: same profile, nothing more.
+  assert.equal(runHandler({
+    enabled: both, connected: ["eDP-1", "DP-2"], profiles: [off], base: on,
+    event: "monitor.removed", enabledAfter: dellOnly
+  }), "||on");
+  // A profile that turns the panel off needs the panel in `list`: applying
+  // the rule with the toggle already set by the user is the same thing.
+  assert.equal(runHandler({ enabled: dellOnly, connected: ["eDP-1", "DP-2"], panelOff: true, profiles: [off], base: on }),
+    "eDP-1(off),desc:Dell Inc. DELL U2723QE ABC123||on");
+
+  // Another profile takes over and wants the panel on: the toggle was this
+  // handler's, so it goes, and the panel comes back.
+  const third = { ...edp, id: 2, name: "DP-3", description: "Other Inc. X 1", x: 4000, y: 0 };
+  const three = P.capture("Two externals", [edp, dell, third], rule, how);
+  const all = [...both, { name: "DP-3", description: third.description }];
+  assert.equal(runHandler({
+    enabled: both, connected: ["eDP-1", "DP-2"], profiles: [off, three], base: on,
+    event: "monitor.added", enabledAfter: all, connectedAfter: ["eDP-1", "DP-2", "DP-3"]
+  }), `eDP-1,desc:Dell Inc. DELL U2723QE ABC123,desc:Other Inc. X 1||on|-${flag}`);
+  // But a toggle the user set (Omarchy's hotkey, Panorama) is not the
+  // handler's to clear: the panel stays Omarchy's, as before.
+  assert.equal(runHandler({
+    enabled: dellOnly, connected: ["eDP-1", "DP-2"], panelOff: true, profiles: [docked, three], base: on,
+    event: "monitor.added", enabledAfter: [...dellOnly, { name: "DP-3", description: third.description }], connectedAfter: ["eDP-1", "DP-2", "DP-3"]
+  }), "desc:Dell Inc. DELL U2723QE ABC123,desc:Other Inc. X 1||on");
+  // Turning the panel on live while the profile has it off (Panorama clears the
+  // toggle first) fires monitor.added with the same profile: left alone, so the
+  // profile does not put it straight back off.
+  assert.equal(runHandler({
+    enabled: dellOnly, connected: ["eDP-1", "DP-2"], panelOff: true, profiles: [off], base: on,
+    steps: [{ event: "monitor.added", enabledAfter: both }]
+  }), "||on");
 });
 
 // A virtual output has no DRM connector, which must not read as unplugged.
@@ -221,6 +311,27 @@ test("generated Lua keeps virtual outputs", { skip: !lua && "no lua interpreter"
     enabled: [{ name: "eDP-1" }, { name: "PANO-1" }], connected: ["eDP-1"], disconnected: ["DP-2"],
     profiles: [virt], base: [{ output: "eDP-1", disabled: false }]
   }), "eDP-1,PANO-1||on");
+  // Turned off, a virtual output is gone from every list, so the profile would
+  // stop matching and the base rules would turn it back on, without end (this
+  // took a compositor down once). The disabling rule is not applied.
+  const virtOff = { ...virt, rules: [{ output: "eDP-1", disabled: false }, { output: "PANO-1", disabled: true }] };
+  assert.equal(runHandler({
+    enabled: [{ name: "eDP-1" }, { name: "PANO-1" }], connected: ["eDP-1"],
+    profiles: [virtOff], base: [{ output: "eDP-1", disabled: false }]
+  }), "eDP-1||on", "virtual output left on");
+});
+
+// Whatever the cause, a profile switch that immediately brings the previous
+// profile back must not be made again and again within the same second.
+test("generated Lua damps a profile flapping", { skip: !lua && "no lua interpreter" }, () => {
+  const base = [{ output: "eDP-1", disabled: false }];
+  const both = [{ name: "eDP-1" }, { name: "DP-2", description: dell.description }];
+  const unplug = { event: "monitor.removed", enabledAfter: [{ name: "eDP-1" }], connectedAfter: ["eDP-1"], after: 0 };
+  const replug = { event: "monitor.added", enabledAfter: both, connectedAfter: ["eDP-1", "DP-2"], after: 0 };
+  assert.equal(runHandler({ enabled: both, connected: ["eDP-1", "DP-2"], profiles: [docked], base, steps: [unplug, replug] }),
+    "||on", "back within the same second: refused");
+  assert.equal(runHandler({ enabled: both, connected: ["eDP-1", "DP-2"], profiles: [docked], base, steps: [unplug, { ...replug, after: 1 }] }),
+    "eDP-1,desc:Dell Inc. DELL U2723QE ABC123||on", "a second later it is a real re-plug");
 });
 
 test("generated Lua is valid", { skip: spawnSync("luac", ["-v"]).status !== 0 && "no luac" }, () => {

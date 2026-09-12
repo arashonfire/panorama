@@ -414,9 +414,10 @@ Not done / not tested:
       and on `monitor.added`/`monitor.removed`, it picks the profile whose
       monitors are exactly the connected ones and applies its rules and
       workspace rules; with no match it re-applies the base rules. It only
-      re-applies when the matching profile (or the lid state) changed: turning
-      a display off or on fires those events too, and re-applying the profile
-      then would turn it straight back on.
+      re-applies when the matching profile changed: turning a display off or
+      on fires those events too, and re-applying the profile then would turn
+      it straight back on. A switch that immediately brings the previous
+      profile back is refused within the same second (see the crash below).
 - [x] Connected set = Hyprland's enabled monitors (with descriptions) plus
       connected-but-off connectors from `/sys/class/drm/*/status`, because
       Hyprland's Lua doesn't list disabled monitors. This also picks the right
@@ -431,6 +432,25 @@ Not done / not tested:
       `internal-monitor-disable` toggle, via `bin/panorama-omarchy-internal`:
       set before the rules go out, put back when the change is reverted, and a
       no-op off Omarchy. `tests/e2e/internal-flag.sh` (17 checks, temp files).
+- [x] A profile that turns the panel off holds that toggle itself: the handler
+      writes it (Omarchy's exact bytes, on Omarchy only) whenever the rules it
+      applies turn a laptop panel off while another display shows, and clears
+      it when its own rules later turn the panel on. Before this the unplug
+      path cleared the toggle and nothing put it back, so on the next re-plug
+      or reload Omarchy's watcher turned the panel on again, against the
+      profile; and with the toggle present the profile's own "panel off" rule
+      was skipped, so a panel that was on stayed on. A toggle the user set
+      (Omarchy's hotkey, Panorama) is never cleared by a profile change.
+- [x] A disabling rule is never applied to a virtual output (`hyprctl output
+      create`): turned off it vanishes from Hyprland's list and has no DRM
+      connector, so the profile stops matching, the base rules turn it back on,
+      and the two alternate without end. Doing exactly that in a live check on
+      2026-09-12 deadlocked Hyprland 0.56.2 in `xcb_flush` inside
+      `CMonitorLayoutController::arrange()` (black screen, no input; crash
+      report `~/.cache/hyprland/hyprlandCrashReport1567.txt`), and the SIGUSR1
+      unwind Hyprland offers for a stuck event aborted it instead. The
+      generated Lua is proven in the unit tests only; do not disable outputs
+      on a live session to test it.
 - [x] Never a session with no screen: rules that would leave every connected
       display off are applied and then overridden, each connected output coming
       back at Hyprland's defaults. Omarchy's "laptop display off" toggle counts
@@ -449,9 +469,10 @@ Not done / not tested:
 - [x] `lib/match.js` (shared matching), `lib/profiles.js`, `parseCall` with
       several arguments; a section whose profiles can't be read is refused,
       not overwritten
-- [x] Tests: 77 unit tests, including the generated Lua run in a real Lua
+- [x] Tests: 86 unit tests, including the generated Lua run in a real Lua
       interpreter against a stubbed `hl` (match / no match / turned-off panel /
-      startup / lid closed / hot-plug event), `luac -p` of a whole file with
+      startup / lid closed / hot-plug events in sequence / Omarchy's toggle
+      held and released / virtual outputs / flapping), `luac -p` of a whole file with
       profiles, and "Omarchy's clamshell parser still sees exactly one eDP-1
       rule". `tests/e2e/profiles.sh` (7 checks) registers the real handler with
       `hyprctl eval` and hot-plugs a headless output: profile layout +

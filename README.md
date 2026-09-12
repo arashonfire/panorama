@@ -43,7 +43,7 @@ brightness too, so you never have to hand-edit config files:
 | `brightnessctl` | optional  | Laptop/backlight brightness |
 | `ddcutil`  | optional       | External monitor brightness, contrast and input over DDC/CI. Needs the `i2c-dev` module and access to `/dev/i2c-*` |
 | `edid-decode` | optional    | Enables the capability panel |
-| Omarchy    | optional       | On Omarchy, turning a laptop panel off also sets Omarchy's `internal-monitor-disable` toggle, because its clamshell watcher re-enables an unflagged panel every couple of seconds. Elsewhere this is a no-op. |
+| Omarchy    | optional       | On Omarchy, turning a laptop panel off also sets Omarchy's `internal-monitor-disable` toggle, because its clamshell watcher re-enables an unflagged panel every couple of seconds; a profile that turns the panel off holds the same toggle while it is in force. Elsewhere this is a no-op. |
 
 ### On a plain Hyprland install
 
