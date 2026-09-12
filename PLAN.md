@@ -406,14 +406,33 @@ Not done / not tested:
       plus one `panorama_profiles({ profiles }, { base rules })` call. At load,
       and on `monitor.added`/`monitor.removed`, it picks the profile whose
       monitors are exactly the connected ones and applies its rules and
-      workspace rules; with no match it re-applies the base rules.
+      workspace rules; with no match it re-applies the base rules. It only
+      re-applies when the matching profile (or the lid state) changed: turning
+      a display off or on fires those events too, and re-applying the profile
+      then would turn it straight back on.
 - [x] Connected set = Hyprland's enabled monitors (with descriptions) plus
       connected-but-off connectors from `/sys/class/drm/*/status`, because
       Hyprland's Lua doesn't list disabled monitors. This also picks the right
       profile at startup, before any output is up.
 - [x] Omarchy clamshell: while `internal-monitor-clamshell.lua` exists (lid
       closed with an external monitor), the handler leaves the laptop panel's
-      rules alone. On reload, Omarchy's toggle file loads after `monitors.lua`
+      rules alone.
+- [x] Omarchy's watcher polls every 2 s while docked with the lid open and
+      re-enables a disabled laptop panel (`sync_internal_scale` reads the scale
+      of enabled monitors only, so an off panel never matches), which no monitor
+      rule can survive. Turning one off therefore also sets Omarchy's own
+      `internal-monitor-disable` toggle, via `bin/panorama-omarchy-internal`:
+      set before the rules go out, put back when the change is reverted, and a
+      no-op off Omarchy. `tests/e2e/internal-flag.sh` (17 checks, temp files).
+- [x] Never a session with no screen: rules that would leave every connected
+      display off are applied and then overridden, each connected output coming
+      back at Hyprland's defaults. Omarchy's "laptop display off" toggle counts
+      only while another display is actually showing something, and is cleared
+      once the external goes (the toggle directory loads *after* `monitors.lua`,
+      so leaving it would re-disable the panel on the next reload). `connected()`
+      drops ports the kernel no longer reports even when Hyprland still lists
+      them, so an unplug in progress is never read as a live display; outputs
+      with no DRM connector at all (`hyprctl output create`) still count. On reload, Omarchy's toggle file loads after `monitors.lua`
       and wins anyway.
 - [x] App: Profiles… dialog (add for the connected monitors, rename, delete,
       default workspaces per monitor, "matches now"), a "Profile: …" header
@@ -472,7 +491,13 @@ Not done / not tested:
       `m_vrr`), `hyprland-vrr-active-when-refused.md` (`ensureVRR` sets
       `m_vrrActive` when adaptive sync was rejected),
       `hdr-displayid-cta-not-detected.md` (HDR metadata / BT.2020 inside a
-      DisplayID extension's CTA block not picked up, Samsung ATNA60HS01)
+      DisplayID extension's CTA block not picked up, Samsung ATNA60HS01),
+      `aquamarine-backup-crtc-modeset-einval.md` (a powered-down output is
+      parked on a backup CRTC that is not checked against its `possible_crtcs`,
+      so bringing it back fails with `EINVAL` until a udev hotplug re-probe
+      reassigns a usable one. An idle DPMS off on a single-panel laptop is
+      enough: the machine then cannot wake. Not Panorama's doing, but Panorama's
+      turn-a-display-off is one of the ways in)
 - [ ] Investigate (Hyprland / NVIDIA): after repeated HDR ↔ sRGB switches the
       OLED stayed in HDR mode (backlight ignored) while Hyprland reported
       sRGB; one more HDR on/off cleared it. Needs a reliable repro first.

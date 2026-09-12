@@ -49,6 +49,11 @@ test("logicalSize applies scale and rotation", () => {
   assert.deepEqual(plain(M.logicalSize({ ...edp, scale: 0 })), { width: 2560, height: 1600 });
 });
 
+test("isInternal spots laptop panels by connector", () => {
+  ["eDP-1", "LVDS-1", "DSI-1"].forEach((n) => assert.equal(M.isInternal(n), true, n));
+  ["HDMI-A-1", "DP-1", "PANO-1", "eDPX-1", "", null, undefined].forEach((n) => assert.equal(M.isInternal(n), false, String(n)));
+});
+
 test("disabled and mirroring monitors are not placed", () => {
   const disabled = { ...headless, name: "D", disabled: true };
   const mirror = { ...headless, name: "M", mirrorOf: "0" };

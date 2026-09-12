@@ -31,11 +31,17 @@ Singleton {
   property var _requested: []
   property var _globalsBefore: ({})
   property var _globalsAfter: ({})
+  // Omarchy's laptop-panel flag: what it said before the apply ("on"/"off", or
+  // "absent" off Omarchy) and what this apply changed it to ("" when untouched).
+  property string _internalFlagBefore: ""
+  property string _internalFlagWritten: ""
+  property string _internalFlagPanel: ""
   property int _logStart: -1
   property bool _quitAfter: false
   property bool _expectReload: false
 
   readonly property string _log: Quickshell.env("XDG_RUNTIME_DIR") + "/hypr/" + Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") + "/hyprland.log"
+  readonly property string _internalHelper: decodeURIComponent(String(Qt.resolvedUrl("../bin/panorama-omarchy-internal")).replace(/^file:\/\//, ""))
 
   // Someone (Persist) is about to reload Hyprland on purpose.
   function expectReload() {
@@ -54,21 +60,64 @@ Singleton {
     _globalsBefore = before
     issues = []
     state = "applying"
-    // Remember where the log ends, to spot VRR refusals caused by this apply.
-    logRunner.run(["sh", "-c", "wc -l < \"$1\"", "sh", _log], function (code, output) {
-      root._logStart = code === 0 ? parseInt(output, 10) : -1
-      root._send(root._requested, root._before, root._globalsAfter, function (ok, output) {
-        if (!ok) {
-          // Statements before the failing one already ran, so undo them.
-          root._revert("Hyprland rejected the change: " + output, true)
-          return
-        }
-        root.secondsLeft = root.timeout
-        root.state = "confirming"
-        countdown.restart()
-        settle.restart()
+    // The flag goes first: a laptop panel disabled without it is switched back
+    // on by Omarchy's watcher within a couple of seconds, mid-countdown.
+    _setInternalFlag(D.internalFlag(Draft.pending), function () {
+      // Remember where the log ends, to spot VRR refusals caused by this apply.
+      logRunner.run(["sh", "-c", "wc -l < \"$1\"", "sh", root._log], function (code, output) {
+        root._logStart = code === 0 ? parseInt(output, 10) : -1
+        root._send(root._requested, root._before, root._globalsAfter, function (ok, output) {
+          if (!ok) {
+            // Statements before the failing one already ran, so undo them.
+            root._revert("Hyprland rejected the change: " + output, true, true)
+            return
+          }
+          root.secondsLeft = root.timeout
+          root.state = "confirming"
+          countdown.restart()
+          settle.restart()
+        })
       })
     })
+  }
+
+  // Brings Omarchy's laptop-panel flag in line with `want` (from
+  // D.internalFlag), remembering what it said so a revert can put it back.
+  // A no-op when there is no laptop panel, off Omarchy, or when it already agrees.
+  function _setInternalFlag(want, callback) {
+    _internalFlagBefore = ""
+    _internalFlagWritten = ""
+    _internalFlagPanel = want ? want.name : ""
+    if (!want) {
+      callback()
+      return
+    }
+    flagRunner.run([_internalHelper, "state"], function (code, output) {
+      var now = code === 0 ? output.trim() : "absent"
+      var wanted = want.off ? "off" : "on"
+      root._internalFlagBefore = now
+      if (now === "absent" || now === wanted) {
+        callback()
+        return
+      }
+      root._internalFlagWritten = wanted
+      root._writeInternalFlag(wanted, callback)
+    })
+  }
+
+  function _writeInternalFlag(value, callback) {
+    flagRunner.run(value === "off" ? [_internalHelper, "off", _internalFlagPanel] : [_internalHelper, "on"],
+                   function () { callback() })
+  }
+
+  // Puts the flag back as it was, so an unconfirmed change leaves nothing behind.
+  function _restoreInternalFlag(callback) {
+    if (!_internalFlagWritten) {
+      callback()
+      return
+    }
+    _internalFlagWritten = ""
+    _writeInternalFlag(_internalFlagBefore, callback)
   }
 
   function keep() {
@@ -80,12 +129,17 @@ Singleton {
     _requested.forEach(function (c) { rules[c.name] = D.toRule(c) })
     appliedRules = rules
     appliedGlobals = Object.assign({}, appliedGlobals, _globalsAfter)
+    _internalFlagWritten = ""
     Draft.reset()
     _say(issues.length
          ? "Applied with Hyprland's adjustments. Not saved yet."
          : "Applied. Not saved yet: save to keep it after a reload or restart.", false)
   }
 
+  // Saying no, or not answering, drops the draft too: the monitors are back as
+  // they were, so a pending edit left behind would have the app contradict the
+  // screen, and only Reset would clear it. A rejected apply keeps it, because
+  // nothing was applied and the request is probably worth adjusting.
   function revert() {
     if (state !== "confirming") return
     _revert("Reverted to the previous settings.", false)
@@ -164,13 +218,19 @@ Singleton {
     messageAt = new Date()
   }
 
-  function _revert(text, isError) {
+  function _revert(text, isError, keepDraft) {
     countdown.stop()
     settle.stop()
     verify.stop()
     state = "reverting"
     var names = _requested.map(function (c) { return c.name })
     var before = _before.filter(function (c) { return names.indexOf(c.name) >= 0 })
+    _restoreInternalFlag(function () {
+      root._sendRevert(before, text, isError, keepDraft)
+    })
+  }
+
+  function _sendRevert(before, text, isError, keepDraft) {
     _send(before, _requested, _globalsBefore, function (ok) {
       if (!ok) {
         // Re-applying the previous state failed; fall back to the config files.
@@ -179,6 +239,7 @@ Singleton {
       }
       root.state = "idle"
       root.issues = []
+      if (!keepDraft) Draft.reset()
       root._say(text, isError)
       root._restoreWorkspaces(root._snapshot.filter(function (m) { return !m.disabled }).map(function (m) { return m.name }))
       if (root._quitAfter) quitDelay.start()
@@ -259,6 +320,10 @@ Singleton {
 
   Command {
     id: sdrRunner
+  }
+
+  Command {
+    id: flagRunner
   }
 
   Timer {

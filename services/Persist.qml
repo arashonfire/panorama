@@ -252,7 +252,7 @@ Singleton {
         root._say("Restored " + root.displayPath + " from before the last save.", false)
         return
       }
-      var before = root._snapshot.map(function (m) { return D.fromLive(m, root._snapshot) })
+      var before = D.expectedAfterReload(root._snapshot, function (m) { return root.savedRequestFor(m) })
       var issues = D.verify(before, Hypr.monitors)
       if (issues.length) root._say("Saved to " + root.displayPath + ", but after reloading: " + issues.join(" "), true)
       else root._say("Saved to " + root.displayPath + ". The previous file is backed up.", false)

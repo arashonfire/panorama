@@ -71,7 +71,7 @@ ColumnLayout {
       if (root.liveHdr)
         return "In HDR the panel ignores its backlight: the picture sets its own light. This sets how bright ordinary content looks; your brightness keys do the same. It's live, and saved with Save…."
       var backend = Brightness.backendOf(root.name)
-      if (backend === "none") return /^(eDP|LVDS|DSI)-/.test(root.name) ? "No backlight control found." : "This monitor doesn't answer DDC/CI, so its brightness can't be set from here."
+      if (backend === "none") return M.isInternal(root.name) ? "No backlight control found." : "This monitor doesn't answer DDC/CI, so its brightness can't be set from here."
       if (!backend) return "Reading brightness…"
       return backend === "ddc" ? "Set over DDC/CI. Follows your brightness keys." : "Follows your brightness keys."
     }

@@ -145,6 +145,37 @@ test("validate", () => {
   ]);
 });
 
+// Omarchy's watcher re-enables a laptop panel disabled without its toggle flag,
+// so the flag has to follow the request exactly.
+test("internalFlag tracks the laptop panel", () => {
+  assert.deepEqual(plain(D.internalFlag(base)), { name: "eDP-1", off: false }, "panel on: Omarchy keeps it");
+  assert.deepEqual(plain(D.internalFlag([D.merge(edpCfg, { enabled: false }), panoCfg])),
+    { name: "eDP-1", off: true }, "panel off with another display on");
+  assert.deepEqual(plain(D.internalFlag([D.merge(edpCfg, { enabled: false }), D.merge(panoCfg, { enabled: false })])),
+    { name: "eDP-1", off: false }, "nothing else on: not Omarchy's case, and validate refuses it anyway");
+  assert.deepEqual(plain(D.internalFlag([panoCfg])), null, "no laptop panel");
+  // A mirroring external still counts as on: the panel is not the only output.
+  assert.deepEqual(plain(D.internalFlag([D.merge(edpCfg, { enabled: false }), D.merge(panoCfg, { mirror: "eDP-1" })])),
+    { name: "eDP-1", off: true });
+});
+
+// The check after a save must trust the file over a live state that something
+// outside Panorama had already undone.
+test("expectedAfterReload takes enabled from the saved rule", () => {
+  const off = { output: "eDP-1", disabled: true };
+  const names = (list) => plain(list).map((c) => [c.name, c.enabled]);
+  assert.deepEqual(names(D.expectedAfterReload(live, () => null)), [["eDP-1", true], ["PANO-1", true]], "no rule: live as it is");
+  assert.deepEqual(names(D.expectedAfterReload(live, (m) => (m.name === "eDP-1" ? off : null))),
+    [["eDP-1", false], ["PANO-1", true]], "the file says off, though the panel was on");
+  // A rule that says nothing about `disabled` leaves the live value alone.
+  assert.deepEqual(names(D.expectedAfterReload(live, () => ({ output: "eDP-1", scale: 1.6 }))),
+    [["eDP-1", true], ["PANO-1", true]]);
+  // Everything else still comes from the live state.
+  assert.equal(plain(D.expectedAfterReload(live, () => off))[0].scale, 1.6);
+  assert.deepEqual(plain(D.verify(D.expectedAfterReload(live, (m) => (m.name === "eDP-1" ? off : null)),
+    [{ ...edp, disabled: true }, headless])), [], "a reload that turns it off is no longer an issue");
+});
+
 test("verify reports what Hyprland did differently", () => {
   assert.deepEqual(plain(D.verify([edpCfg], live)), []);
   assert.deepEqual(plain(D.verify([D.merge(edpCfg, { scale: 1.25 })], live)), ["Hyprland adjusted eDP-1's scale to 1.6."]);

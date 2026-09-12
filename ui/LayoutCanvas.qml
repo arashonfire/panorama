@@ -147,6 +147,10 @@ Rectangle {
     font.pixelSize: Theme.font.body
   }
 
+  // Displays with no place in the layout: turned off, or mirroring another one.
+  // A turned-off display has no tile to click, so this is the only way back from
+  // it; each one carries its own Turn on rather than sending you to the Settings
+  // panel to find the switch.
   Row {
     id: tray
     visible: root.others.length > 0
@@ -155,7 +159,9 @@ Rectangle {
 
     Text {
       anchors.verticalCenter: parent.verticalCenter
-      text: "Not in layout"
+      text: root.others.every(function (c) { return !c.enabled }) ? "Turned off"
+          : root.others.every(function (c) { return c.enabled }) ? "Mirroring"
+          : "Not in layout"
       color: Theme.muted
       font.family: Theme.fontFamily
       font.pixelSize: Theme.font.caption
@@ -164,13 +170,28 @@ Rectangle {
     Repeater {
       model: root.others
 
-      PButton {
+      Row {
+        id: entry
         required property var modelData
-        text: Hypr.numberOf(modelData.name) + "  " + modelData.name + " · "
-              + (modelData.enabled ? "mirroring " + modelData.mirror : "off")
-              + (Draft.isChanged(modelData.name) ? " · edited" : "")
-        checked: modelData.name === root.selectedName
-        onClicked: root.select(modelData.name)
+        spacing: Theme.space.xs
+
+        PButton {
+          text: Hypr.numberOf(entry.modelData.name) + "  " + entry.modelData.name
+                + (entry.modelData.enabled ? " · mirroring " + entry.modelData.mirror : "")
+                + (Draft.isChanged(entry.modelData.name) ? " · edited" : "")
+          checked: entry.modelData.name === root.selectedName
+          onClicked: root.select(entry.modelData.name)
+        }
+
+        PButton {
+          visible: !entry.modelData.enabled
+          enabled: root.editable
+          text: "Turn on"
+          onClicked: {
+            root.select(entry.modelData.name)
+            Draft.setEnabled(entry.modelData.name, true)
+          }
+        }
       }
     }
   }

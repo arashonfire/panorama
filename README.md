@@ -43,6 +43,7 @@ brightness too, so you never have to hand-edit config files:
 | `brightnessctl` | optional  | Laptop/backlight brightness |
 | `ddcutil`  | optional       | External monitor brightness, contrast and input over DDC/CI. Needs the `i2c-dev` module and access to `/dev/i2c-*` |
 | `edid-decode` | optional    | Enables the capability panel |
+| Omarchy    | optional       | On Omarchy, turning a laptop panel off also sets Omarchy's `internal-monitor-disable` toggle, because its clamshell watcher re-enables an unflagged panel every couple of seconds. Elsewhere this is a no-op. |
 
 Primary test system: **Omarchy** on a laptop with a Samsung ATNA60HS01 OLED
 (2560×1600, 165 Hz, 10-bit, HDR10 with ~1100 nit peak, adaptive sync from 48 to 165 Hz,
@@ -63,6 +64,7 @@ bin/panorama --backups             # list backups (~/.local/state/panorama/backu
 node --test tests/                 # unit tests for lib/
 tests/e2e/apply.sh                 # apply/keep/revert flow against a headless output
 tests/e2e/persist.sh               # backup/write/restore helper on temp files
+tests/e2e/internal-flag.sh         # Omarchy laptop-panel toggle helper on temp files
 tests/e2e/save.sh                  # save + undo against a scratch copy of monitors.lua
 tests/e2e/color.sh [MONITOR]       # 10-bit, HDR, VRR on a real monitor (reverted; flickers)
 tests/e2e/brightness.sh [MONITOR]  # brightness backend, app ↔ keys sync, HDR-aware keys (restored)

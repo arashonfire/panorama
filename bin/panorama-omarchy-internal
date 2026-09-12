@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Omarchy's "the user meant to turn the laptop panel off" flag.
+#
+# Omarchy's clamshell watcher (omarchy-hyprland-monitor-watch) re-enables a
+# disabled internal panel every couple of seconds while a laptop is docked with
+# the lid open, so a rule alone cannot keep one off. Its own toggle flag is the
+# opt-out: omarchy-hyprland-monitor-clamshell returns early while the flag is
+# there and an external display is active, and so does the recover path.
+#
+#   panorama-omarchy-internal state            print on, off, or absent
+#   panorama-omarchy-internal off CONNECTOR    keep CONNECTOR off
+#   panorama-omarchy-internal on               hand the panel back to Omarchy
+#
+# "absent" means this isn't Omarchy (no state directory): nothing is fighting
+# the rule, so there is nothing to write. Environment: PANORAMA_TOGGLES_DIR.
+set -euo pipefail
+
+state_dir=${XDG_STATE_HOME:-$HOME/.local/state}/omarchy
+toggles_dir=${PANORAMA_TOGGLES_DIR:-$state_dir/toggles/hypr}
+flag=$toggles_dir/internal-monitor-disable.lua
+
+die() {
+  echo "panorama-omarchy-internal: $*" >&2
+  exit 1
+}
+
+# Without Omarchy's state directory there is no watcher to appease. Checked on
+# the directory rather than the flag, so an Omarchy install that has simply
+# never used the toggle is still recognised.
+present() {
+  [[ -d $state_dir || -n ${PANORAMA_TOGGLES_DIR:-} ]]
+}
+
+case "${1:-}" in
+  state)
+    if ! present; then
+      echo absent
+    elif [[ -f $flag ]]; then
+      echo off
+    else
+      echo on
+    fi
+    ;;
+  off)
+    connector=${2:-}
+    [[ -n $connector ]] || die "off needs a connector name"
+    # The name is written into Lua that Hyprland loads on its next reload, so
+    # only a plain connector may pass. Same check Omarchy makes.
+    [[ $connector =~ ^[A-Za-z0-9._-]+$ ]] || die "refusing unsafe monitor name: $connector"
+    present || exit 0
+    mkdir -p "$toggles_dir"
+    # Byte-for-byte what omarchy-hyprland-monitor-internal writes, so Omarchy's
+    # own "is this already set" comparison against it holds.
+    printf 'hl.monitor({ output = "%s", disabled = true })\n' "$connector" >"$flag"
+    ;;
+  on)
+    present || exit 0
+    rm -f -- "$flag"
+    ;;
+  *)
+    sed -n '2,16s/^# \{0,1\}//p' "$0" >&2
+    exit 2
+    ;;
+esac
