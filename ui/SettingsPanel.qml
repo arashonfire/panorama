@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
-import qs.services
+import "../services"
 import "../lib/monitor.js" as M
 import "../lib/scale.js" as S
 import "../lib/draft.js" as D

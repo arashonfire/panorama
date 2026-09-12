@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Controls
-import qs.services
+import "../services"
 
 // Compact select: a button showing the current option that opens a list.
 // `options` is [{ value, label }]; the owner updates `value` on `picked`.

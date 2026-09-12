@@ -1,0 +1,13 @@
+# Panorama's singletons, declared so they resolve the same way whether this
+# tree is the `qs -p` config root (Panorama standalone) or a folder loaded from
+# outside it (the Omarchy shell plugin). Without this file the plugin case
+# silently hands every import site its own instance -- see
+# spikes/plugin-imports.sh.
+singleton Apply 1.0 Apply.qml
+singleton Brightness 1.0 Brightness.qml
+singleton Draft 1.0 Draft.qml
+singleton Edid 1.0 Edid.qml
+singleton Globals 1.0 Globals.qml
+singleton Hypr 1.0 Hypr.qml
+singleton Persist 1.0 Persist.qml
+singleton Theme 1.0 Theme.qml

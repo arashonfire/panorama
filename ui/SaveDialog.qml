@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import qs.services
+import "../services"
 
 // Shows exactly what saving will write before anything touches the file.
 Item {

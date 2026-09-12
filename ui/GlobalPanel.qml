@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
-import qs.services
+import "../services"
 import "../lib/globals.js" as G
 
 // Hyprland's global display options. They go through the same apply →

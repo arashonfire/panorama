@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import qs.services
+import "../services"
 import "../lib/monitor.js" as M
 
 // The selected monitor: editable settings, or everything Hyprland reports.

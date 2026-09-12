@@ -2,7 +2,7 @@ import QtQuick
 // Qualified, so TextField below is Panorama's own (ui/TextField.qml), not Qt's.
 import QtQuick.Controls as QQC
 import QtQuick.Layouts
-import qs.services
+import "../services"
 import "../lib/profiles.js" as P
 import "../lib/monitor.js" as M
 

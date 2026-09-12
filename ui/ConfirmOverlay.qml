@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
-import qs.services
+import "../services"
 
 // "Keep these display settings?" in the middle of every screen while an
 // applied change waits for confirmation, so it's reachable even if the main

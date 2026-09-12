@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
-import qs.services
+import "../services"
 
 // Label + controls. An accent bar marks a setting that differs from the live state.
 RowLayout {

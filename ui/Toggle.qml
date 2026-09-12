@@ -1,5 +1,5 @@
 import QtQuick
-import qs.services
+import "../services"
 
 // On/off switch. The owner holds the value: bind `checked`, act on `toggled`.
 Item {

@@ -1,5 +1,5 @@
 import QtQuick
-import qs.services
+import "../services"
 
 // Number input with a unit. Commits on Enter or when focus leaves; the owner
 // holds the value.

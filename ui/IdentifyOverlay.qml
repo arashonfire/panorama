@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import qs.services
+import "../services"
 import "../lib/monitor.js" as M
 
 // Big number card centred on one physical screen, matching the numbers on the

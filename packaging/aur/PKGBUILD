@@ -54,7 +54,7 @@ package() {
   local share="$pkgdir/usr/share/$_name"
 
   install -d "$share"
-  cp -r --no-preserve=ownership shell.qml services lib ui bin "$share/"
+  cp -r --no-preserve=ownership shell.qml Panorama.qml services lib ui bin "$share/"
   chmod 755 "$share"/bin/*
 
   # Symlink: the launcher finds the app next to its real path.

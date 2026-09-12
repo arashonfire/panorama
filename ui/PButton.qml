@@ -1,5 +1,5 @@
 import QtQuick
-import qs.services
+import "../services"
 
 // Themed push button, styled after Omarchy's control tokens. `checked` gives
 // it the persistent selected look (used by chips).

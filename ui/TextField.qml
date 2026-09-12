@@ -1,5 +1,5 @@
 import QtQuick
-import qs.services
+import "../services"
 
 // Single-line text input. Commits on Enter or when focus leaves; the owner
 // holds the text.

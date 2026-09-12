@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
-import qs.services
+import "../services"
 
 // Small uppercase heading with a rule under it.
 ColumnLayout {

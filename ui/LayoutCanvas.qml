@@ -1,5 +1,5 @@
 import QtQuick
-import qs.services
+import "../services"
 import "../lib/monitor.js" as M
 import "../lib/draft.js" as D
 import "../lib/layout.js" as L

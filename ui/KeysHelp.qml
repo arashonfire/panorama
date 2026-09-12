@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
-import qs.services
+import "../services"
 
 // The keyboard shortcuts, shown with ? or F1.
 Item {

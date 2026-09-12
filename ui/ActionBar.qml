@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
-import qs.services
+import "../services"
 
 // Bottom bar: pending changes with Reset/Apply, the keep/revert prompt while
 // an applied change waits for confirmation, save progress, and the outcome of

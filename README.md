@@ -346,7 +346,9 @@ resets the position to `auto`, which Save pins back to real coordinates.
 ## Project layout
 
 ```
-shell.qml                 entry point: window, keys, IPC, per-screen overlays
+Panorama.qml              the app: window, keys, IPC, per-screen overlays
+shell.qml                 entry point: its own Quickshell instance (bin/panorama)
+Panel.qml                 entry point: Omarchy shell plugin panel
 
 services/                 singletons
   Hypr.qml                live monitor state (hyprctl JSON + events + poll)

@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
-import qs.services
+import "../services"
 
 // Every adjustable monitor's brightness side by side, for multi-monitor
 // setups. Changes apply at once, like the brightness keys.

@@ -1,5 +1,5 @@
 import QtQuick
-import qs.services
+import "../services"
 
 // Horizontal slider snapping to `step`. The owner holds the value: bind
 // `value` and act on `moved` (fires continuously while dragging).

@@ -202,10 +202,16 @@ Singleton {
     })
   }
 
+  // Nothing unconfirmed is left live and Panorama can go. What going means is
+  // up to whoever hosts it: shell.qml ends the process, while the Omarchy
+  // plugin (Panel.qml) only hides its panel -- Qt.quit() there would take the
+  // whole desktop shell down with it.
+  signal readyToQuit()
+
   // Never leave an unconfirmed change behind: revert first, then quit.
   function quit() {
     if (state === "idle") {
-      Qt.quit()
+      readyToQuit()
       return
     }
     _quitAfter = true
@@ -381,7 +387,12 @@ Singleton {
   Timer {
     id: quitDelay
     interval: 300
-    onTriggered: Qt.quit()
+    onTriggered: {
+      // As a plugin this singleton outlives the panel, so a quit must not
+      // carry over into the next time a revert finishes.
+      root._quitAfter = false
+      root.readyToQuit()
+    }
   }
 
   Connections {

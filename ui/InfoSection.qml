@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
-import qs.services
+import "../services"
 
 // A titled block of label/value rows. Values are selectable so serials and
 // descriptions can be copied.

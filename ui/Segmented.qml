@@ -1,5 +1,5 @@
 import QtQuick
-import qs.services
+import "../services"
 
 // A row of mutually exclusive buttons. `options` is [{ value, label }].
 Row {
