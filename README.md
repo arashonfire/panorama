@@ -86,7 +86,7 @@ bin/panorama --identify            # show each display's number on its screen
 bin/panorama --quit
 bin/panorama --revert              # put monitors.lua back as it was before the last save
 bin/panorama --backups             # list backups (~/.local/state/panorama/backups)
-./install.sh                       # symlink `panorama` + desktop entry into ~/.local
+./install.sh                       # link `panorama` into ~/.local/bin + a menu entry for this checkout
 ./install.sh --uninstall
 (cd packaging/aur && PANORAMA_REPO=file://$PWD/../.. makepkg -si)   # system package from committed HEAD
 node --test tests/                 # unit tests for lib/
@@ -100,6 +100,18 @@ tests/e2e/profiles.sh              # live profile switching on a headless output
 tests/e2e/nudge.sh                 # keyboard move (Alt+arrows) on a headless output (draft only)
 bin/panorama --brightness +5%      # what a brightness key binding runs (see Brightness below)
 ```
+
+`install.sh` writes the desktop entry rather than copying it, with `Exec` set to
+this checkout's `bin/panorama`. Menu entries are launched with the session's
+PATH, not your shell's, so a bare `panorama` would only work with `~/.local/bin`
+on both; an absolute path works wherever you cloned to. Re-run it after moving
+the checkout. The AUR package keeps `Exec=panorama`, since it installs
+`/usr/bin/panorama`.
+
+A launch that fails has nowhere to print when it comes from a menu entry or a
+keybinding, so with no terminal attached `bin/panorama` reports through
+`notify-send` as well: Quickshell missing, Hyprland not running, a QML error
+that keeps the window from appearing, and what `--revert` restored.
 
 Scripting over IPC (same path as the UI, confirmation included):
 

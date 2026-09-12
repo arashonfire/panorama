@@ -166,8 +166,15 @@ Source references are Hyprland v0.56.2.
 - [x] Keyboard: ←/→ select, I identify, Ctrl+R refresh, Esc close
 - [x] `bin/panorama`: float rule + `qs -n -d -p`. A second launch calls the IPC
       `show` and focuses the window with `hl.dsp.focus({ window = "title:^Panorama$" })`.
-      Also `--identify` and `--quit`. `install.sh` symlinks the launcher and
-      `.desktop` file into `~/.local`.
+      Also `--identify` and `--quit`. `install.sh` symlinks the launcher into
+      `~/.local/bin` and *writes* the `.desktop` entry with `Exec` pointing at
+      the checkout (a copied `Exec=panorama` only works when `~/.local/bin` is
+      on the session's PATH, which it wasn't on a CachyOS test machine, so the
+      menu entry did nothing while `bin/panorama` worked). Launch errors are
+      invisible from a menu entry, so without a terminal on stderr the launcher
+      also sends them to `notify-send`; `qs -d` daemonizes before loading the
+      config and always exits 0, so a QML failure is caught by waiting for the
+      new instance to answer IPC instead.
 - [x] `lib/monitor.js`: pure helpers (layout math, formatting, inspector data),
       12 node tests (`node --test tests/`) against a real `hyprctl` fixture
 

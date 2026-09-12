@@ -23,11 +23,29 @@ Options:
 EOF
 }
 
+# Launched from a menu entry or a keybinding there is no terminal to print to,
+# so anything worth reading goes to a notification as well.
+notify() {
+  command -v notify-send >/dev/null || return 0
+  notify-send -a Panorama -u "$1" "Panorama" "$2"
+}
+
+say() {
+  echo "panorama: $*"
+  [[ -t 1 ]] || notify normal "$*"
+}
+
+die() {
+  echo "panorama: $*" >&2
+  [[ -t 2 ]] || notify critical "$*"
+  exit 1
+}
+
 revert() {
   local backup
-  backup=$("$root/bin/panorama-persist" restore) || exit 1
+  backup=$("$root/bin/panorama-persist" restore 2>&1) || die "${backup#panorama-persist: }"
   hyprctl reload >/dev/null 2>&1 || true
-  echo "panorama: restored $("$root/bin/panorama-persist" path) from $backup"
+  say "restored $("$root/bin/panorama-persist" path) from $backup"
 }
 
 ipc() {
@@ -36,7 +54,7 @@ ipc() {
 
 case "${1:-}" in
   "") ;;
-  --identify) ipc identify || { echo "panorama: not running" >&2; exit 1; }; exit 0 ;;
+  --identify) ipc identify || die "not running"; exit 0 ;;
   --quit) ipc quit || true; exit 0 ;;
   --revert) revert; exit 0 ;;
   --backups) "$root/bin/panorama-persist" backups; exit 0 ;;
@@ -45,8 +63,8 @@ case "${1:-}" in
   *) usage >&2; exit 2 ;;
 esac
 
-command -v qs >/dev/null || { echo "panorama: Quickshell (qs) is not installed" >&2; exit 1; }
-[[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]] || { echo "panorama: Hyprland is not running" >&2; exit 1; }
+command -v qs >/dev/null || die "Quickshell (qs) is not installed"
+[[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]] || die "Hyprland is not running"
 
 if ipc show; then
   hyprctl dispatch 'hl.dsp.focus({ window = "title:^Panorama$" })' >/dev/null 2>&1 || true
@@ -57,4 +75,14 @@ fi
 # A config reload drops the rule; it is re-added on every launch.
 hyprctl eval 'hl.window_rule({ name = "panorama-float", match = { class = "^org\\.quickshell$", title = "^Panorama$" }, float = true, center = true, size = { 1100, 720 } })' >/dev/null 2>&1 || true
 
-exec qs -n -d -p "$root"
+qs -n -d -p "$root" || die "Quickshell could not start Panorama"
+
+# `qs -d` daemonizes before it loads the config, so its exit code says nothing
+# about whether the window came up. With no terminal to show a load error on,
+# wait for the instance to answer and report it if it never does.
+[[ -t 2 ]] && exit 0
+for _ in $(seq 1 16); do
+  ipc show && exit 0
+  sleep 0.25
+done
+die "did not start; see 'qs log' for why"
