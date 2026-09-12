@@ -3,10 +3,14 @@
 # Panorama: display settings for Hyprland (Quickshell app).
 # Builds from git. For a local test build (committed HEAD only):
 #   PANORAMA_REPO=file:///path/to/checkout makepkg -si
+#
+# pkgver below is the last build's value, as AUR VCS packages carry it; before
+# pushing to the AUR, set it from pkgver() and regenerate the metadata:
+#   makepkg --printsrcinfo > .SRCINFO
 
 pkgname=panorama-git
 _name=panorama
-pkgver=r0
+pkgver=r8.d18d255
 pkgrel=1
 pkgdesc='Display settings for Hyprland: arrange monitors, resolution, scaling, HDR, VRR, brightness, profiles'
 arch=('any')

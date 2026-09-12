@@ -503,9 +503,16 @@ Not done / not tested:
       sRGB; one more HDR on/off cleared it. Needs a reliable repro first.
 - [x] Packaging: `packaging/aur/PKGBUILD` (`panorama-git`) installs the app
       to `/usr/share/panorama`, links `/usr/bin/panorama`, runs the unit tests
-      in `check()`. Builds locally with `PANORAMA_REPO=file://…`. Before the
-      AUR: publish the repository (set `url`), MIT `LICENSE` added,
-      generate `.SRCINFO`.
+      in `check()`. Builds locally with `PANORAMA_REPO=file://…`. Repository
+      published (`source` points at GitHub, `url` at arashlab.com), MIT
+      `LICENSE` added, `packaging/aur/.SRCINFO` generated. A full local build
+      of r8.d18d255 passes: `check()` ran the 84 unit tests and the package
+      holds only `/usr/share/panorama`, the `/usr/bin/panorama` symlink, the
+      desktop file, README and LICENSE.
+- [ ] Submit to the AUR: push `PKGBUILD` + `.SRCINFO` to
+      `ssh://aur@aur.archlinux.org/panorama-git.git`. Refresh both first
+      (`pkgver`, then `makepkg --printsrcinfo > .SRCINFO`) — they carry the
+      commit they were last generated from.
 - [x] Docs pass: README shortcut table, Omarchy menu and hotkey notes,
       current project layout.
 - [ ] README screenshots (need the screen on; grim can't capture while DPMS

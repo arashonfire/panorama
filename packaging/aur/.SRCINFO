@@ -1,0 +1,24 @@
+pkgbase = panorama-git
+	pkgdesc = Display settings for Hyprland: arrange monitors, resolution, scaling, HDR, VRR, brightness, profiles
+	pkgver = r8.d18d255
+	pkgrel = 1
+	url = https://arashlab.com/apps/panorama
+	arch = any
+	license = MIT
+	makedepends = git
+	depends = hyprland
+	depends = quickshell
+	depends = jq
+	depends = lua
+	depends = gawk
+	depends = util-linux
+	optdepends = v4l-utils: EDID details (edid-decode), HDR luminance from the panel
+	optdepends = ddcutil: brightness and DDC/CI controls for external monitors
+	optdepends = brightnessctl: backlight control outside Omarchy
+	optdepends = libnotify: brightness notifications outside Omarchy
+	provides = panorama
+	conflicts = panorama
+	source = panorama::git+https://github.com/arashonfire/panorama.git
+	sha256sums = SKIP
+
+pkgname = panorama-git
