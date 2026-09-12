@@ -68,6 +68,37 @@ Item {
         font.pixelSize: Theme.font.body
       }
 
+      // A config that never loads the file would take the save silently.
+      Rectangle {
+        visible: !Persist.configLoads
+        Layout.fillWidth: true
+        implicitHeight: warning.implicitHeight + 2 * Theme.space.md
+        radius: Theme.radius
+        color: Theme.alpha(Theme.urgent, 0.1)
+        border.color: Theme.urgent
+
+        ColumnLayout {
+          id: warning
+          anchors { left: parent.left; right: parent.right; top: parent.top; margins: Theme.space.md }
+          spacing: Theme.space.sm
+
+          Text {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            text: Persist.configIssue
+            color: Theme.foreground
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.font.body
+          }
+
+          PButton {
+            visible: Persist.configState === "missing"
+            text: "Add require(\"" + Persist.module + "\") to hyprland.lua"
+            onClicked: Persist.addRequire()
+          }
+        }
+      }
+
       Rectangle {
         Layout.fillWidth: true
         Layout.fillHeight: true

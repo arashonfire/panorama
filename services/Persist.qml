@@ -18,6 +18,22 @@ Singleton {
   readonly property string path: Quickshell.env("PANORAMA_MONITORS_FILE")
     || ((Quickshell.env("XDG_CONFIG_HOME") || home + "/.config") + "/hypr/monitors.lua")
   readonly property string displayPath: path.indexOf(home + "/") === 0 ? "~" + path.slice(home.length) : path
+  // The Lua module name Hyprland would require the file under.
+  readonly property string module: path.replace(/^.*\//, "").replace(/\.lua$/, "")
+
+  // Whether Hyprland's config actually loads the file we write: "loaded",
+  // "missing" (a Lua config that requires nothing), "legacy" (the old
+  // hyprland.conf format, which cannot load Lua at all) or "unknown" (no
+  // config found next to the file, so nothing can be concluded). Omarchy
+  // always has the require line; a stock Hyprland config does not, and
+  // without it a save is written and then ignored.
+  property string configState: "unknown"
+  readonly property bool configLoads: configState !== "missing" && configState !== "legacy"
+  readonly property string configIssue: configState === "missing"
+      ? "Nothing in your Hyprland config loads " + displayPath + ", so anything saved there is ignored. Adding require(\"" + module + "\") to hyprland.lua fixes that."
+      : configState === "legacy"
+        ? "Your Hyprland config is the older hyprland.conf format, which can't load " + displayPath + ". Panorama needs the Lua config (hyprland.lua); Hyprland drops .conf in 0.57."
+        : ""
 
   property string text: ""
   // Per-connector "port" / "monitor" choices made in the UI.
@@ -103,7 +119,11 @@ Singleton {
   readonly property bool saved: !parsed.error && B.isSaved(lines, parsed)
   readonly property var conflicts: B.conflicts(Hypr.monitors, parsed)
   readonly property bool busy: state !== "idle"
-  readonly property bool canSave: !busy && Apply.state === "idle" && !Draft.dirty && !parsed.error && Hypr.monitors.length > 0
+  // Everything saving needs apart from Hyprland actually loading the file. The
+  // save dialog opens on this, so a config that loads nothing can be explained
+  // (and fixed) there rather than leaving a dead button.
+  readonly property bool canPrepareSave: !busy && Apply.state === "idle" && !Draft.dirty && !parsed.error && Hypr.monitors.length > 0
+  readonly property bool canSave: canPrepareSave && configLoads
   readonly property bool canUndo: !busy && Apply.state === "idle" && lastBackup !== ""
 
   property var _errorsBefore: []
@@ -187,6 +207,28 @@ Singleton {
     })
   }
 
+  // Asks the helper whether anything loads our file. `announce` puts a problem
+  // in the message bar, which is how it gets said at launch.
+  function checkConfig(announce) {
+    configRunner.run([helper, "loaded"], function (code, output) {
+      root.configState = code === 0 ? output.trim() : "unknown"
+      if (announce && !root.configLoads) root._say(root.configIssue, true)
+    })
+  }
+
+  // Adds require("monitors") to hyprland.lua so the file is loaded at all.
+  function addRequire() {
+    if (configState !== "missing" || busy) return
+    configRunner.run([helper, "require"], function (code, output) {
+      if (code !== 0) {
+        root._say("Couldn't add the require line: " + output.trim(), true)
+        return
+      }
+      root._say("Added require(\"" + root.module + "\") to " + output.trim() + " (backed up first). Hyprland loads " + root.displayPath + " from now on.", false)
+      root.checkConfig(false)
+    })
+  }
+
   function _say(text, isError) {
     message = text
     messageIsError = isError
@@ -227,6 +269,13 @@ Singleton {
   Command {
     id: runner
   }
+
+  // Separate from `runner`, which the save flow uses in sequence.
+  Command {
+    id: configRunner
+  }
+
+  Component.onCompleted: checkConfig(true)
 
   // Give Hyprland time to re-read the files and re-apply the rules.
   Timer {

@@ -37,13 +37,41 @@ brightness too, so you never have to hand-edit config files:
 
 | Component  | Version tested | Notes |
 |------------|----------------|-------|
-| Hyprland   | 0.56.2         | **Lua config only** (`hyprland.lua`). Legacy `hyprland.conf` is not supported. |
+| Hyprland   | 0.56.2         | **Lua config only** (`hyprland.lua`), which must require the saved file — see *On a plain Hyprland install*. Legacy `hyprland.conf` is not supported (Hyprland removes it in 0.57). |
 | Quickshell | 0.3.1          | Uses `Quickshell.Io` and `Quickshell.Hyprland` |
 | Qt         | 6.11           | |
 | `brightnessctl` | optional  | Laptop/backlight brightness |
 | `ddcutil`  | optional       | External monitor brightness, contrast and input over DDC/CI. Needs the `i2c-dev` module and access to `/dev/i2c-*` |
 | `edid-decode` | optional    | Enables the capability panel |
 | Omarchy    | optional       | On Omarchy, turning a laptop panel off also sets Omarchy's `internal-monitor-disable` toggle, because its clamshell watcher re-enables an unflagged panel every couple of seconds. Elsewhere this is a no-op. |
+
+### On a plain Hyprland install
+
+Panorama works on any Hyprland that uses the Lua config, Omarchy or not. The one
+thing to set up is loading what it saves: it writes `~/.config/hypr/monitors.lua`,
+and Hyprland reads that file only if your config requires it. Omarchy's
+`hyprland.lua` already does; a stock one doesn't, so add this line at the **end**
+of `hyprland.lua` — after any monitor rules of your own, since the last rule for
+a monitor is the one that wins:
+
+```lua
+require("monitors")
+```
+
+Hyprland puts its own config directory on Lua's `package.path`, so nothing else
+is needed (Omarchy's own `require("hypr.monitors")` works because its bootstrap
+adds `~/.config` as well).
+
+Panorama checks this at launch. If nothing loads the file it says so in the
+status bar, holds the Save button, and the Save dialog offers to append the line
+for you — `hyprland.lua` is backed up next to the other backups first. A
+`hyprland.conf`-only setup is reported the same way; there is no fix for it
+short of moving to the Lua config.
+
+Off Omarchy the rest degrades on its own: the theme falls back to a neutral
+palette, laptop brightness to `brightnessctl`, the on-screen display to
+`notify-send`, and the laptop-panel toggle helper does nothing (there is no
+clamshell watcher to appease).
 
 Primary test system: **Omarchy** on a laptop with a Samsung ATNA60HS01 OLED
 (2560×1600, 165 Hz, 10-bit, HDR10 with ~1100 nit peak, adaptive sync from 48 to 165 Hz,
@@ -101,7 +129,14 @@ Keys (press **?** or F1 in the app for this list):
 | Ctrl + R | refresh |
 | Esc | close a dialog, or Panorama |
 
-Suggested Hyprland binding (Omarchy `~/.config/hypr/bindings.lua`):
+Suggested Hyprland binding, in `hyprland.lua`:
+
+```lua
+hl.bind("SUPER + CTRL + M", hl.dsp.exec_cmd("panorama"))
+```
+
+On Omarchy, in `~/.config/hypr/bindings.lua`, so it shows up in the keybindings
+menu:
 
 ```lua
 o.bind("SUPER + CTRL + M", "Display settings", { launch = "panorama" })
@@ -232,10 +267,17 @@ o.bind("XF86MonBrightnessUp", "Brightness up", "panorama --brightness --hdr +5%"
 o.bind("XF86MonBrightnessDown", "Brightness down", "panorama --brightness --hdr 5%-", { locked = true, repeating = true })
 ```
 
+Elsewhere `o.bind` doesn't exist; bind them with Hyprland's own function, which
+gets a `notify-send` progress bubble instead of Omarchy's OSD:
+
+```lua
+hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("panorama --brightness --hdr +5%"), { locked = true, repeating = true })
+hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("panorama --brightness --hdr 5%-"), { locked = true, repeating = true })
+```
+
 (`panorama` on your `PATH` via `./install.sh`. In HDR the keys go through
 Panorama when it's running; otherwise they change `sdrbrightness` in the
-monitor's saved rule.) Outside Omarchy, the same bindings work, with a
-`notify-send` progress bubble as the OSD.
+monitor's saved rule.)
 
 ### Troubleshooting: brightness has no effect
 
@@ -262,7 +304,8 @@ makes auto HDR possible.
 ## Omarchy integration
 
 The app runs as a **standalone** Quickshell config, so it works on any Hyprland
-setup that uses the Lua config. On Omarchy it also:
+setup that uses the Lua config (see *On a plain Hyprland install*). On Omarchy
+it also:
 
 - picks up the current theme from `~/.local/state/omarchy/current/theme/colors.toml`
   (with a neutral fallback everywhere else);

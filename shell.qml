@@ -18,7 +18,7 @@ ShellRoot {
   readonly property bool dialogOpen: saveDialogOpen || profilesOpen || helpOpen
   readonly property var selected: Hypr.byName(selectedName)
   // Something to save: live changes, or the file doesn't match the live state.
-  readonly property bool canOpenSave: Persist.canSave && (Apply.liveUnsaved || !Persist.saved)
+  readonly property bool canOpenSave: Persist.canPrepareSave && (Apply.liveUnsaved || !Persist.saved)
 
   // Keep a valid selection: the focused monitor, else the first one.
   function ensureSelection() {
@@ -103,6 +103,8 @@ ShellRoot {
         edited: Persist.profilesEdited
       })
     }
+    function checkConfig(): void { Persist.checkConfig(false) }
+    function addRequire(): void { Persist.addRequire() }
     function save(): void { Persist.save() }
     function undoSave(): void { Persist.undo() }
 
@@ -133,6 +135,7 @@ ShellRoot {
           state: Persist.state,
           saved: Persist.saved,
           hasSection: Persist.parsed.hasBlock,
+          configState: Persist.configState,
           error: Persist.parsed.error,
           message: Persist.message,
           messageIsError: Persist.messageIsError,
@@ -191,7 +194,7 @@ ShellRoot {
         else if (key === Qt.Key_Left || key === Qt.Key_Up) shell.selectRelative(-1)
         else if (key === Qt.Key_Right || key === Qt.Key_Down) shell.selectRelative(1)
         else if (key === Qt.Key_I && !ctrl) shell.identify()
-        else if (key === Qt.Key_R && ctrl) Hypr.refresh()
+        else if (key === Qt.Key_R && ctrl) { Hypr.refresh(); Persist.checkConfig(false) }
         else if (key === Qt.Key_Question || key === Qt.Key_F1) shell.helpOpen = true
         else return
         event.accepted = true
@@ -233,7 +236,7 @@ ShellRoot {
 
           Rectangle {
             id: status
-            readonly property bool attention: !!Persist.parsed.error
+            readonly property bool attention: !!Persist.parsed.error || !Persist.configLoads
             readonly property bool unsaved: Apply.liveUnsaved || (Persist.parsed.hasBlock && !Persist.saved)
             implicitWidth: statusLabel.implicitWidth + 2 * Theme.space.md
             implicitHeight: statusLabel.implicitHeight + 2 * Theme.space.xs
@@ -244,7 +247,9 @@ ShellRoot {
             Text {
               id: statusLabel
               anchors.centerIn: parent
-              text: status.attention ? "monitors.lua needs attention"
+              text: Persist.parsed.error ? "monitors.lua needs attention"
+                  : Persist.configState === "legacy" ? "hyprland.conf isn't supported"
+                  : !Persist.configLoads ? "monitors.lua isn't loaded"
                   : Persist.busy ? "Saving…"
                   : Apply.liveUnsaved ? "Live · not saved"
                   : Persist.saved ? "Saved"
@@ -292,7 +297,7 @@ ShellRoot {
 
           PButton {
             text: "Refresh"
-            onClicked: Hypr.refresh()
+            onClicked: { Hypr.refresh(); Persist.checkConfig(false) }
           }
         }
 

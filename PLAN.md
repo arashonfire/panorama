@@ -513,6 +513,18 @@ Not done / not tested:
       `ssh://aur@aur.archlinux.org/panorama-git.git`. Refresh both first
       (`pkgver`, then `makepkg --printsrcinfo > .SRCINFO`) — they carry the
       commit they were last generated from.
+- [x] Portability off Omarchy: everything Omarchy-specific already degrades
+      (theme, `omarchy-brightness-display`, OSD, the laptop-panel toggle), but
+      a stock `hyprland.lua` requires nothing, so the saved file was written
+      and then ignored — the only sign being the vague post-reload warning.
+      `panorama-persist loaded` now reports `loaded` / `missing` / `legacy`
+      (a `hyprland.conf` setup) / `unknown`; Panorama says so at launch, holds
+      Save, and `panorama-persist require` appends `require("monitors")` to
+      `hyprland.lua` (backed up first) from a button in the Save dialog.
+      Backups are name-filtered so that copy is never restored over
+      `monitors.lua`. Documented under *On a plain Hyprland install*, with
+      `hl.bind` examples for the bindings that were only given as Omarchy's
+      `o.bind`. `tests/e2e/persist.sh` covers all four states (28 checks).
 - [x] Docs pass: README shortcut table, Omarchy menu and hotkey notes,
       current project layout.
 - [ ] README screenshots (need the screen on; grim can't capture while DPMS

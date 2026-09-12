@@ -6,8 +6,12 @@
 #   panorama-persist save              new content on stdin; prints the backup path
 #   panorama-persist restore [BACKUP]  put a backup back (default: the newest)
 #   panorama-persist backups           list backups, newest first
+#   panorama-persist loaded            print whether Hyprland's config loads that
+#                                      file: loaded, missing, legacy or unknown
+#   panorama-persist require           make hyprland.lua require it (prints the file)
 #
-# Environment: PANORAMA_MONITORS_FILE, PANORAMA_BACKUP_DIR, PANORAMA_KEEP_BACKUPS.
+# Environment: PANORAMA_MONITORS_FILE, PANORAMA_BACKUP_DIR, PANORAMA_KEEP_BACKUPS,
+# PANORAMA_HYPR_DIR.
 set -euo pipefail
 
 target=${PANORAMA_MONITORS_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/monitors.lua}
@@ -29,15 +33,21 @@ stamp() {
   date +%Y%m%d-%H%M%S.%3N
 }
 
+# Backups of the managed file only: the same directory also holds the copy of
+# hyprland.lua taken when the require line is added, which is not one of these.
+mine() {
+  [[ -d $backup_dir ]] || return 0
+  find "$backup_dir" -maxdepth 1 -type f -name "$(basename -- "$target").*" -printf '%f\n'
+}
+
 # Backups sort by name; `.before-restore` ones are safety copies taken by
 # `restore` and never count as "the newest".
 latest() {
-  [[ -d $backup_dir ]] || return 0
-  find "$backup_dir" -maxdepth 1 -type f -printf '%f\n' | grep -v '\.before-restore$' | sort | tail -n 1 | sed "s|^|$backup_dir/|"
+  mine | grep -v '\.before-restore$' | sort | tail -n 1 | sed "s|^|$backup_dir/|"
 }
 
 prune() {
-  find "$backup_dir" -maxdepth 1 -type f -printf '%f\n' | sort | head -n "-$keep" | while read -r old; do
+  mine | sort | head -n "-$keep" | while read -r old; do
     rm -f -- "$backup_dir/$old"
   done
 }
@@ -69,6 +79,76 @@ replace() {
   cat -- "$src" >"$tmp"
   [[ -e $real ]] && chmod --reference="$real" -- "$tmp"
   mv -f -- "$tmp" "$real"
+}
+
+# --- is the file we write actually loaded? ------------------------------------
+
+# Hyprland puts its own config directory on Lua's package.path, so a
+# `require("monitors")` line in hyprland.lua is what loads the rules we write.
+# Omarchy ships that line (as `require("hypr.monitors")`, its bootstrap adding
+# ~/.config to the path too); a stock Hyprland config has no such line, and
+# without one every save is written and then ignored.
+hypr_dir=${PANORAMA_HYPR_DIR:-$(dirname -- "$target")}
+module=$(basename -- "$target" .lua)
+
+main_config() {
+  if [[ -n ${HYPRLAND_CONFIG:-} && -f ${HYPRLAND_CONFIG} ]]; then
+    printf '%s\n' "$HYPRLAND_CONFIG"
+  elif [[ -f $hypr_dir/hyprland.lua ]]; then
+    printf '%s\n' "$hypr_dir/hyprland.lua"
+  fi
+}
+
+# Whether any Lua file in the config directory requires (or dofiles) the
+# module. Comments are stripped first, so a commented-out line doesn't count,
+# and the managed file itself is skipped.
+requires_module() {
+  local f
+  while IFS= read -r f; do
+    [[ $f -ef $target ]] && continue
+    sed 's/--.*//' -- "$f" | grep -Eq "(require|dofile).*\b$module\b" && return 0
+  done < <(find "$hypr_dir" -maxdepth 2 -type f -name '*.lua' 2>/dev/null)
+  return 1
+}
+
+# loaded  something requires it
+# missing a Lua config that doesn't
+# legacy  the old hyprland.conf format, which cannot load Lua at all
+# unknown no config found here -- the caller should not read anything into it
+config_state() {
+  if requires_module; then
+    echo loaded
+  elif [[ -n $(main_config) ]]; then
+    echo missing
+  elif [[ -f $hypr_dir/hyprland.conf ]]; then
+    echo legacy
+  else
+    echo unknown
+  fi
+}
+
+# Appends the require line to hyprland.lua, backing it up first. At the end of
+# the file on purpose: the last rule for a monitor is the one Hyprland keeps,
+# so this way saved rules win over any left in the config by hand.
+add_require() {
+  local main dest
+  main=$(main_config)
+  [[ -n $main ]] || die "no hyprland.lua in $hypr_dir to add the require line to"
+  [[ $(dirname -- "$main") == "$(dirname -- "$target")" ]] \
+    || die "$target is not next to $main, so require(\"$module\") would not find it"
+  if requires_module; then
+    printf '%s\n' "$main"
+    return
+  fi
+  mkdir -p "$backup_dir"
+  dest="$backup_dir/$(basename -- "$main").$(stamp)"
+  cp -p -- "$main" "$dest"
+  {
+    printf '\n-- Load the monitor rules Panorama writes. Keep this last: the final rule\n'
+    printf -- '-- for a monitor is the one Hyprland uses.\n'
+    printf 'require("%s")\n' "$module"
+  } >>"$main"
+  printf '%s\n' "$main"
 }
 
 incoming=""
@@ -105,10 +185,12 @@ case "${1:-}" in
   save) save ;;
   restore) restore "${2:-}" ;;
   backups)
-    [[ -d $backup_dir ]] && find "$backup_dir" -maxdepth 1 -type f | sort -r
+    mine | sort -r | sed "s|^|$backup_dir/|"
     ;;
+  loaded) config_state ;;
+  require) add_require ;;
   *)
-    sed -n '2,10s/^# \{0,1\}//p' "$0" >&2
+    sed -n '2,13s/^# \{0,1\}//p' "$0" >&2
     exit 2
     ;;
 esac

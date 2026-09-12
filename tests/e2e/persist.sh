@@ -78,6 +78,24 @@ done
 check "at most $PANORAMA_KEEP_BACKUPS files kept" "$(find "$PANORAMA_BACKUP_DIR" -type f | wc -l | tr -d ' ')" 4
 check "newest backup is the previous save" "$(cat "$("$persist" backups | grep -v before-restore | head -n 1)")" 'hl.monitor({ output = "P5" })'
 
+echo "8. is the file loaded by the Hyprland config?"
+cfg=$tmp/hypr
+cp /usr/share/hypr/hyprland.lua "$cfg/hyprland.lua" 2>/dev/null || printf 'hl.monitor({ output = "" })\n' >"$cfg/hyprland.lua"
+check "a Lua config that requires nothing" "$("$persist" loaded)" missing
+printf 'hl.monitor({})\n-- require("monitors")\n' >>"$cfg/hyprland.lua"
+check "a commented-out require doesn't count" "$("$persist" loaded)" missing
+check "the require line is added" "$("$persist" require)" "$cfg/hyprland.lua"
+check "and is picked up" "$("$persist" loaded)" loaded
+check "hyprland.lua backed up" "$(find "$PANORAMA_BACKUP_DIR" -name 'hyprland.lua.*' | wc -l | tr -d ' ')" 1
+check "still valid Lua" "$(luac -p "$cfg/hyprland.lua" 2>&1)" ""
+"$persist" require >/dev/null
+check "adding it twice writes one line" "$(grep -c '^require("monitors")$' "$cfg/hyprland.lua")" 1
+check "hyprland.lua is not a monitors.lua backup" "$("$persist" backups | grep -c hyprland || true)" 0
+mv "$cfg/hyprland.lua" "$cfg/hyprland.conf"
+check "the old .conf format is reported" "$("$persist" loaded)" legacy
+rm -f "$cfg/hyprland.conf"
+check "no config to judge by" "$("$persist" loaded)" unknown
+
 echo
 echo "$pass passed, $fail failed"
 ((fail == 0))
