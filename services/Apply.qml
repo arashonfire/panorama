@@ -208,6 +208,8 @@ Singleton {
   // whole desktop shell down with it.
   signal readyToQuit()
 
+  onStateChanged: Lifecycle.applying = state !== "idle"
+
   // Never leave an unconfirmed change behind: revert first, then quit.
   function quit() {
     if (state === "idle") {
@@ -216,6 +218,13 @@ Singleton {
     }
     _quitAfter = true
     if (state === "confirming") revert()
+  }
+
+  // Panorama is back in use before a revert-then-quit landed (the plugin panel
+  // reopened): let the revert finish, but don't quit at the end of it.
+  function cancelQuit() {
+    _quitAfter = false
+    quitDelay.stop()
   }
 
   function _say(text, isError) {

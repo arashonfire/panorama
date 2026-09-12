@@ -275,6 +275,13 @@ Singleton {
     id: configRunner
   }
 
+  onStateChanged: Lifecycle.saving = state !== "idle"
+
+  Connections {
+    target: Lifecycle
+    function onActiveChanged() { if (Lifecycle.active) root.checkConfig(false) }
+  }
+
   Component.onCompleted: checkConfig(true)
 
   // Give Hyprland time to re-read the files and re-apply the rules.

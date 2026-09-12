@@ -48,5 +48,10 @@ Singleton {
     onTriggered: root.refresh()
   }
 
+  Connections {
+    target: Lifecycle
+    function onActiveChanged() { if (Lifecycle.active) root.refresh() }
+  }
+
   Component.onCompleted: refresh()
 }

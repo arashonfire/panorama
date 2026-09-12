@@ -180,6 +180,20 @@ sdr_target() {
   }'
 }
 
+# A call into a running Panorama, printing its answer: the Omarchy shell's
+# panel when Panorama is enabled there as a plugin (see hosted() in
+# bin/panorama), otherwise a standalone instance.
+panorama_ipc() {
+  local id
+  id=$(jq -r '.id // empty' "$root/manifest.json" 2>/dev/null) || id=
+  if [[ -n $id ]] && command -v omarchy-plugin-list >/dev/null && command -v omarchy-shell >/dev/null \
+    && omarchy-plugin-list --json 2>/dev/null | jq -e --arg id "$id" 'any(.[]; .id == $id and .enabled)' >/dev/null 2>&1; then
+    omarchy-shell panorama "$@" 2>/dev/null
+  else
+    qs -p "$root" ipc call panorama "$@" 2>/dev/null
+  fi
+}
+
 # Through a running Panorama (it sends a complete rule and knows what was
 # asked for). Without it, a partial rule that Hyprland merges into the
 # monitor's rule of the same name, which Panorama's saved section provides;
@@ -188,7 +202,7 @@ sdr_target() {
 sdr_set() {
   local mon=$1 spec=$2 value current
   [[ $mon =~ ^[A-Za-z0-9._-]+$ ]] || return 1
-  value=$(qs -p "$root" ipc call panorama stepSdrBrightness "$mon" "$spec" 2>/dev/null)
+  value=$(panorama_ipc stepSdrBrightness "$mon" "$spec")
   if [[ $value =~ ^[0-9.]+$ ]]; then
     echo "$value"
     return 0

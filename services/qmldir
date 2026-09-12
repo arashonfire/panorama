@@ -9,5 +9,6 @@ singleton Draft 1.0 Draft.qml
 singleton Edid 1.0 Edid.qml
 singleton Globals 1.0 Globals.qml
 singleton Hypr 1.0 Hypr.qml
+singleton Lifecycle 1.0 Lifecycle.qml
 singleton Persist 1.0 Persist.qml
 singleton Theme 1.0 Theme.qml

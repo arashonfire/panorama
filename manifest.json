@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "com.arashlab.panorama",
+  "name": "Panorama",
+  "version": "0.1.0",
+  "author": "Arash",
+  "license": "MIT",
+  "description": "Display settings for Hyprland: arrange monitors, resolution, scaling, HDR, VRR, brightness, profiles",
+  "kinds": [
+    "panel"
+  ],
+  "entryPoints": {
+    "panel": "Panel.qml"
+  }
+}

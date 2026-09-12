@@ -20,6 +20,9 @@ Options:
                on-screen display, for key bindings. With --hdr, a monitor in
                HDR gets its SDR brightness changed instead (needs Panorama running).
   -h, --help   Show this help
+
+With Panorama enabled as an Omarchy shell plugin, these reach the panel in the
+Omarchy shell instead of starting a separate Panorama.
 EOF
 }
 
@@ -48,8 +51,28 @@ revert() {
   say "restored $("$root/bin/panorama-persist" path) from $backup"
 }
 
+# Enabled as an Omarchy shell plugin, Panorama runs inside that shell, and a
+# standalone instance beside it would be a second Panorama editing the same
+# monitors. The id comes from the manifest, so it is spelled in one place.
+hosted() {
+  if [[ -z ${_hosted:-} ]]; then
+    _hosted=no
+    local id
+    id=$(jq -r '.id // empty' "$root/manifest.json" 2>/dev/null) || id=
+    [[ -n $id ]] && command -v omarchy-plugin-list >/dev/null && command -v omarchy-shell >/dev/null \
+      && omarchy-plugin-list --json 2>/dev/null | jq -e --arg id "$id" 'any(.[]; .id == $id and .enabled)' >/dev/null 2>&1 \
+      && _hosted=$id
+  fi
+  [[ $_hosted != no ]]
+}
+
+# The plugin's IPC target lives in the Omarchy shell, and only while it is open.
 ipc() {
-  qs -p "$root" ipc call panorama "$@" >/dev/null 2>&1
+  if hosted; then
+    omarchy-shell panorama "$@" >/dev/null 2>&1
+  else
+    qs -p "$root" ipc call panorama "$@" >/dev/null 2>&1
+  fi
 }
 
 case "${1:-}" in
@@ -68,6 +91,11 @@ command -v qs >/dev/null || die "Quickshell (qs) is not installed"
 
 if ipc show; then
   hyprctl dispatch 'hl.dsp.focus({ window = "title:^Panorama$" })' >/dev/null 2>&1 || true
+  exit 0
+fi
+
+if hosted; then
+  omarchy-shell shell summon "$_hosted" >/dev/null 2>&1 || die "the Omarchy shell could not open Panorama"
   exit 0
 fi
 

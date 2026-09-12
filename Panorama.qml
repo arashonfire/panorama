@@ -65,7 +65,7 @@ Item {
   // Draft/Apply/Persist path as the UI, confirmation included.
   IpcHandler {
     target: "panorama"
-    function show(): void { window.visible = true }
+    function show(): void { if (app.floatRuleReady) window.visible = true }
     function identify(): void { app.identify() }
     function quit(): void { Apply.quit() }
 
@@ -161,9 +161,23 @@ Item {
     ConfirmOverlay {}
   }
 
+  // Hyprland tiles a Quickshell FloatingWindow, so float it with a runtime rule
+  // before the window first maps. A config reload drops the rule; every start
+  // adds it again. bin/panorama adds it ahead of a standalone launch as well,
+  // but a plugin is summoned by the Omarchy shell and never goes through it.
+  property bool floatRuleReady: false
+
+  Process {
+    running: true
+    command: ["sh", "-c", "hyprctl eval \"$1\" >/dev/null 2>&1; exit 0", "sh",
+      'hl.window_rule({ name = "panorama-float", match = { class = "^org\\\\.quickshell$", title = "^Panorama$" }, float = true, center = true, size = { 1100, 720 } })']
+    onExited: app.floatRuleReady = true
+  }
+
   FloatingWindow {
     id: window
     title: "Panorama"
+    visible: app.floatRuleReady
     implicitWidth: Math.round(1100 * Theme.unit)
     implicitHeight: Math.round(720 * Theme.unit)
     minimumSize: Qt.size(Math.round(820 * Theme.unit), Math.round(520 * Theme.unit))

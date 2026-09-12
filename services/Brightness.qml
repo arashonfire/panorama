@@ -135,9 +135,14 @@ Singleton {
 
   Timer {
     interval: 1500
-    running: true
+    running: Lifecycle.active
     repeat: true
     onTriggered: root.refresh()
+  }
+
+  Connections {
+    target: Lifecycle
+    function onActiveChanged() { if (Lifecycle.active) root.refresh() }
   }
 
   Component.onCompleted: refresh()

@@ -317,7 +317,8 @@ makes auto HDR possible.
 
 The app runs as a **standalone** Quickshell config, so it works on any Hyprland
 setup that uses the Lua config (see *On a plain Hyprland install*). On Omarchy
-it also:
+it can also run **inside the Omarchy shell** as a plugin (below), and either way
+it:
 
 - picks up the current theme from `~/.local/state/omarchy/current/theme/colors.toml`
   (with a neutral fallback everywhere else);
@@ -335,6 +336,39 @@ the menu reloads on save:
 
 `omarchy menu summon panorama` then opens it directly.
 
+**As an Omarchy shell plugin.** The same checkout is a `panel` plugin
+(`manifest.json`, entry point `Panel.qml`), so it opens inside the shell that
+already draws the bar instead of starting a Quickshell process of its own:
+
+```bash
+omarchy plugin add https://github.com/arashonfire/panorama.git --enable
+```
+
+Omarchy doesn't bind panels to keys, so add one in `~/.config/hypr/bindings.lua`
+(SUPER + CTRL + D is Omarchy's own **Display** panel):
+
+```lua
+o.bind("SUPER + CTRL + M", "Panorama", "omarchy-shell shell toggle com.arashlab.panorama")
+```
+
+For the menu entry above, use that command as the `action`. Differences from
+running it standalone:
+
+- Escape or closing the window hides the panel; an unconfirmed apply is
+  reverted first, as always.
+- Its services pause while the panel is closed (no `hyprctl` or DDC polling in
+  the shell), unless an apply or save is still settling, and it reads
+  everything afresh on open. Each open starts with an empty draft.
+- While the plugin is enabled, `bin/panorama` (and the brightness keys) talk to
+  it there rather than start a second Panorama beside it. HDR-aware brightness
+  keys reach it only while the panel is open; otherwise they fall back as they
+  do with no Panorama running.
+- IPC goes through the shell: `omarchy-shell panorama state`, while open.
+
+Plugins run unsandboxed inside the Omarchy shell. `omarchy plugin update`
+shows the diff before pulling, and `omarchy plugin remove com.arashlab.panorama`
+takes it out again.
+
 **Scale hotkeys (SUPER + / and SUPER + ALT + /).** Omarchy's
 `omarchy-hyprland-monitor-scaling` changes the scale live and records it in
 `monitors.lua` *outside* Panorama's section, which loads later and wins. So a
@@ -349,6 +383,7 @@ resets the position to `auto`, which Save pins back to real coordinates.
 Panorama.qml              the app: window, keys, IPC, per-screen overlays
 shell.qml                 entry point: its own Quickshell instance (bin/panorama)
 Panel.qml                 entry point: Omarchy shell plugin panel
+manifest.json             Omarchy plugin manifest (id com.arashlab.panorama)
 
 services/                 singletons
   Hypr.qml                live monitor state (hyprctl JSON + events + poll)
@@ -358,6 +393,8 @@ services/                 singletons
   Brightness.qml          backlight / DDC values via bin/panorama-brightness
   Edid.qml, Globals.qml   EDID summaries, global options
   Theme.qml, Command.qml  Omarchy-aware look; process runner
+  Lifecycle.qml           whether polling runs (always standalone; the panel as a plugin)
+  qmldir                  declares the singletons, so they resolve from either entry point
 
 lib/                      pure JS (unit tested with node)
   monitor.js layout.js scale.js     layout math, snapping, clean scales

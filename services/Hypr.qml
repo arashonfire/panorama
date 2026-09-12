@@ -97,6 +97,7 @@ Singleton {
     function onRawEvent(event) {
       var name = event.name
       if (name === "configreloaded") root.configReloaded()
+      if (!Lifecycle.active) return
       if (name.indexOf("monitor") === 0 || name.indexOf("focusedmon") === 0
           || name.indexOf("workspace") === 0 || name === "configreloaded")
         debounce.restart()
@@ -111,9 +112,14 @@ Singleton {
 
   Timer {
     interval: 2000
-    running: true
+    running: Lifecycle.active
     repeat: true
     onTriggered: root.refresh()
+  }
+
+  Connections {
+    target: Lifecycle
+    function onActiveChanged() { if (Lifecycle.active) root.refresh() }
   }
 
   Component.onCompleted: refresh()
