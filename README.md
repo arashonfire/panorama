@@ -351,8 +351,20 @@ Omarchy doesn't bind panels to keys, so add one in `~/.config/hypr/bindings.lua`
 o.bind("SUPER + CTRL + M", "Panorama", "omarchy-shell shell toggle com.arashlab.panorama")
 ```
 
-For the menu entry above, use that command as the `action`. Differences from
-running it standalone:
+Once enabled, it adds **Setup › Display Settings** to the Omarchy menu by
+itself: the plugin's service writes the row into
+`~/.config/omarchy/extensions/omarchy-menu.jsonc` the first time the shell loads
+it, and the menu reloads the file on its own. Omarchy has no install hook
+or plugin menu API, so that file is the only way in, and it is handled with care:
+
+- it is added once (`~/.local/state/panorama/omarchy-menu-row` records that), so
+  deleting the row keeps it deleted;
+- a row already called `setup.panorama`, such as the one above, is left as it is;
+- if the menu can't parse the file as it stands, it isn't touched at all, since
+  one bad edit there silently empties every custom row;
+- the row hides itself once the plugin is removed.
+
+Differences from running it standalone:
 
 - Escape or closing the window hides the panel; an unconfirmed apply is
   reverted first, as always.
@@ -383,6 +395,7 @@ resets the position to `auto`, which Save pins back to real coordinates.
 Panorama.qml              the app: window, keys, IPC, per-screen overlays
 shell.qml                 entry point: its own Quickshell instance (bin/panorama)
 Panel.qml                 entry point: Omarchy shell plugin panel
+Service.qml               entry point: Omarchy shell plugin service (adds the menu row once)
 manifest.json             Omarchy plugin manifest (id com.arashlab.panorama)
 
 services/                 singletons
@@ -402,6 +415,7 @@ lib/                      pure JS (unit tested with node)
   lua.js block.js match.js          Lua serialization, managed section, desc: matching
   profiles.js                       profile handler Lua + helpers
   edid.js globals.js brightness.js
+  menu.js                           the Omarchy menu row, added without breaking the file
 
 ui/
   LayoutCanvas.qml MonitorTile.qml  drag-to-arrange canvas

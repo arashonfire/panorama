@@ -7,9 +7,11 @@
   "license": "MIT",
   "description": "Display settings for Hyprland: arrange monitors, resolution, scaling, HDR, VRR, brightness, profiles",
   "kinds": [
-    "panel"
+    "panel",
+    "service"
   ],
   "entryPoints": {
-    "panel": "Panel.qml"
+    "panel": "Panel.qml",
+    "service": "Service.qml"
   }
 }
