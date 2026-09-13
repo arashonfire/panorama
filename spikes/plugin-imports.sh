@@ -36,7 +36,16 @@ import Quickshell
 Singleton {
   readonly property string who: "APP-SVC"
   property int counter: 0
+  property Tool tool: Tool {}
+  readonly property int toolV: tool.v
 }
+EOF
+
+# A plain component sharing the services directory -- services/Command.qml's
+# case. It is reached as a bare sibling from Svc, with no import.
+cat >"$ROOT/app/services/Tool.qml" <<'EOF'
+import QtQuick
+QtObject { readonly property int v: 7 }
 EOF
 
 cat >"$ROOT/app/services/Peer.qml" <<'EOF'
@@ -70,7 +79,8 @@ Item {
   Component.onCompleted: {
     var note = ""
     try { Peer.bump() } catch (e) { note = " bare-sibling-ref=THREW" }
-    console.log("RESULT: shared=" + (w.seen === 42) + " host=" + (w.host || "<none>") + note)
+    console.log("RESULT: shared=" + (w.seen === 42) + " host=" + (w.host || "<none>")
+                + " tool=" + Svc.toolV + note)
   }
 }
 EOF
@@ -160,9 +170,15 @@ EOF
 # ------------------------------------------------------------------- harness
 
 qmldir_on() {
-  printf 'singleton Svc 1.0 Svc.qml\nsingleton Peer 1.0 Peer.qml\n' >"$ROOT/app/services/qmldir"
+  printf 'singleton Svc 1.0 Svc.qml\nsingleton Peer 1.0 Peer.qml\nTool 1.0 Tool.qml\n' \
+    >"$ROOT/app/services/qmldir"
 }
 qmldir_off() { rm -f "$ROOT/app/services/qmldir"; }
+# The easy mistake: a qmldir that lists the singletons and forgets the plain
+# component beside them.
+qmldir_singletons_only() {
+  printf 'singleton Svc 1.0 Svc.qml\nsingleton Peer 1.0 Peer.qml\n' >"$ROOT/app/services/qmldir"
+}
 
 # Runs one instance and echoes its RESULT payload (or a marker if none came).
 standalone() {
@@ -170,6 +186,10 @@ standalone() {
 }
 plugin() {
   SPIKE_URL="$1" timeout 30 qs -n -p "$ROOT/host" 2>&1 | sed -n 's/.*RESULT: //p' | head -1
+}
+# The innermost "caused by" line, for the cases whose point is that loading fails.
+standalone_error() {
+  timeout 30 qs -n -p "$ROOT/app" 2>&1 | sed -n 's/.*caused by @[^ ]*: //p' | tail -1
 }
 
 check() {
@@ -185,8 +205,8 @@ check() {
 
 echo "## with services/qmldir -- the shape to ship"
 qmldir_on
-check "standalone, relative imports"      "shared=true host=APP-SVC" "$(standalone)"
-check "plugin, relative imports"          "shared=true host=APP-SVC" "$(plugin "file://$ROOT/app/Panel.qml")"
+check "standalone, relative imports"      "shared=true host=APP-SVC tool=7" "$(standalone)"
+check "plugin, relative imports"          "shared=true host=APP-SVC tool=7" "$(plugin "file://$ROOT/app/Panel.qml")"
 check "plugin, window types"              "floating=true panel=true" "$(plugin "file://$ROOT/app/Windows.qml")"
 
 # Panel.qml mounts Probe with no `import "."`; the cases above passing is the
@@ -197,10 +217,22 @@ echo "## without services/qmldir -- why the qmldir is load-bearing"
 qmldir_off
 # Under `qs -p` Quickshell registers the config root's singletons itself, which
 # is why Panorama needs no qmldir today.
-check "standalone, no qmldir (works today)" "shared=true host=APP-SVC" "$(standalone)"
+check "standalone, no qmldir (works today)" "shared=true host=APP-SVC tool=7" "$(standalone)"
 # Outside that root nothing registers them: every import site gets its own
 # instance and the bare sibling reference degrades, with no load error at all.
-check "plugin, no qmldir (silent split)"  "shared=false host=<none> bare-sibling-ref=THREW" \
+check "plugin, no qmldir (silent split)"  "shared=false host=<none> tool=undefined bare-sibling-ref=THREW" \
+      "$(plugin "file://$ROOT/app/Panel.qml")"
+
+echo
+echo "## a qmldir that forgets a plain sibling -- breaks standalone only"
+qmldir_singletons_only
+# Once a qmldir exists it, not the directory listing, is what the `qs -p`
+# engine resolves siblings through, so an omitted type is simply not a type.
+check "standalone, sibling omitted from qmldir" "Tool is not a type" "$(standalone_error)"
+# The plugin engine never gets that registration and keeps falling back to
+# plain same-directory lookup -- which is why this failure looks like it only
+# afflicts standalone, and why the spike has to assert both halves.
+check "plugin, sibling omitted from qmldir" "shared=true host=APP-SVC tool=7" \
       "$(plugin "file://$ROOT/app/Panel.qml")"
 
 echo
