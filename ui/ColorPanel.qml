@@ -18,6 +18,13 @@ ColumnLayout {
   readonly property var edid: Edid.byName[name] || null
   readonly property bool hdr: M.isHdr(cfg.cm)
   readonly property string effectiveCm: monitor.colorManagementPreset || "srgb"
+  // HDR and 10-bit controls for panels that can't do them are hidden; "Show
+  // anyway" is for an EDID that undersells the panel.
+  property bool showAll: false
+  readonly property var support: E.supports(edid)
+  readonly property var offers: showAll ? { hdr: true, tenBit: true }
+    : D.colorOffers(support, [cfg, base, { cm: effectiveCm, bitdepth: M.pixelFormat(monitor.currentFormat).bits }])
+  readonly property var hidden: [offers.hdr ? "" : "HDR", offers.tenBit ? "" : "10-bit"].filter(function (s) { return s })
   readonly property bool overridesLuminance: cfg.min_luminance >= 0 || cfg.max_luminance >= 0 || cfg.max_avg_luminance >= 0
   readonly property int labelIndent: 3 + Math.round(96 * Theme.unit) + 2 * Theme.space.md
   readonly property var tristate: [{ value: 0, label: "Auto" }, { value: 1, label: "On" }, { value: -1, label: "Off" }]
@@ -64,13 +71,35 @@ ColumnLayout {
     font.pixelSize: Theme.font.caption
   }
 
+  RowLayout {
+    visible: root.hidden.length > 0
+    Layout.fillWidth: true
+    spacing: Theme.space.md
+
+    Text {
+      Layout.fillWidth: true
+      wrapMode: Text.Wrap
+      text: root.hidden.join(" and ") + " settings are hidden: the panel doesn't advertise "
+            + [root.offers.hdr ? "" : "HDR10", root.offers.tenBit ? "" : "10-bit color"].filter(function (s) { return s }).join(" or ") + "."
+      color: Theme.muted
+      font.family: Theme.fontFamily
+      font.pixelSize: Theme.font.caption
+    }
+
+    PButton {
+      text: "Show anyway"
+      onClicked: root.showAll = true
+    }
+  }
+
   SettingRow {
     label: "Color"
     changed: root.changed("cm")
     Dropdown {
       Layout.fillWidth: true
       accessibleName: "Color preset"
-      options: D.CM_PRESETS.map(function (p) { return { value: p, label: M.colorPresetLabel(p) } })
+      options: D.CM_PRESETS.filter(function (p) { return root.offers.hdr || !M.isHdr(p) })
+                           .map(function (p) { return { value: p, label: M.colorPresetLabel(p) } })
       value: root.cfg.cm
       onPicked: v => root.pickPreset(v)
     }
@@ -132,6 +161,7 @@ ColumnLayout {
   }
 
   SettingRow {
+    visible: root.offers.tenBit
     label: "10-bit"
     changed: root.changed("bitdepth")
     Toggle {
@@ -150,6 +180,7 @@ ColumnLayout {
   }
 
   SettingRow {
+    visible: root.offers.hdr
     label: "HDR support"
     changed: root.changed("supports_hdr")
     Segmented {
@@ -173,7 +204,8 @@ ColumnLayout {
     Layout.fillWidth: true
     Layout.leftMargin: root.labelIndent
     wrapMode: Text.Wrap
-    text: "Auto trusts Hyprland's reading of the EDID; On forces support for panels it misreads. HDR also needs wide color, so forcing HDR forces wide color too."
+    text: "Auto trusts Hyprland's reading of the EDID; On forces support for panels it misreads."
+          + (root.offers.hdr ? " HDR also needs wide color, so forcing HDR forces wide color too." : "")
     color: Theme.muted
     font.family: Theme.fontFamily
     font.pixelSize: Theme.font.caption

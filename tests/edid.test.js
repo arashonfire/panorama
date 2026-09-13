@@ -55,3 +55,27 @@ test("not an EDID dump", () => {
   assert.equal(E.parse("edid-decode: could not read"), null);
   assert.equal(E.summary(null), "");
 });
+
+test("supports: HDR and 10-bit from the EDID, null without one", () => {
+  assert.deepEqual(plain(E.supports(E.parse(oled))), { hdr: true, tenBit: true });
+  assert.deepEqual(plain(E.supports(null)), { hdr: null, tenBit: null });
+
+  const base = (depth) => ["Block 0, Base EDID:", "    Manufacturer: BOE", depth].join("\n");
+  const laptop = E.parse(base("    Bits per primary color channel: 8"));
+  assert.equal(laptop.maxBpc, 8);
+  assert.deepEqual(plain(E.supports(laptop)), { hdr: false, tenBit: false });
+
+  // No stated depth: 10-bit isn't ruled out.
+  const undefinedDepth = E.parse(base("    Color depth is undefined"));
+  assert.equal(undefinedDepth.maxBpc, null);
+  assert.deepEqual(plain(E.supports(undefinedDepth)), { hdr: false, tenBit: null });
+
+  // HDMI monitors often say 8 in the base block and 10 in the HDMI VSDB.
+  const hdmi = E.parse(base("    Bits per primary color channel: 8\n  Vendor-Specific Data Block (HDMI), OUI 00-0C-03:\n    DC_30bit\n    DC_Y444"));
+  assert.equal(hdmi.maxBpc, 10);
+  assert.deepEqual(plain(E.supports(hdmi)), { hdr: false, tenBit: true });
+
+  const displayId = E.parse(base("    Bits per primary color channel: 6\n  Display Interface Features Data Block:\n    Supported bpc for RGB encoding: 6, 8, 10"));
+  assert.equal(displayId.maxBpc, 10);
+  assert.equal(E.parse(oled).maxBpc, 12);
+});

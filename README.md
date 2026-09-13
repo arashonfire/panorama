@@ -15,7 +15,8 @@ brightness too, so you never have to hand-edit config files:
 - **Brightness**: laptop backlight (`brightnessctl`), plus brightness, contrast and
   input source on external monitors over DDC/CI (`ddcutil`)
 - Global render options: tearing, direct scanout, auto-HDR, hardware cursors
-- Advertised capabilities from the EDID (HDR metadata, peak luminance, VRR range)
+- Advertised capabilities from the EDID (HDR metadata, peak luminance, VRR range);
+  HDR and 10-bit settings are hidden on panels that don't advertise them
 - Profiles that switch automatically when you plug a monitor in or out
 - Safe apply: every change is live-previewed, and reverts after 15 seconds
   unless you confirm it
@@ -46,7 +47,7 @@ brightness too, so you never have to hand-edit config files:
 | `libnotify` | optional      | `notify-send`, for messages from launches with no terminal |
 | `brightnessctl` | optional  | Laptop/backlight brightness |
 | `ddcutil`  | optional       | External monitor brightness, contrast and input over DDC/CI. Needs the `i2c-dev` module and access to `/dev/i2c-*` |
-| `edid-decode` | optional    | Enables the capability panel. Arch: in `v4l-utils` |
+| `edid-decode` | optional    | Enables the capability panel, and hiding HDR/10-bit settings a panel can't use (without it, all are shown). Arch: in `v4l-utils` |
 | Omarchy    | optional       | On Omarchy, turning a laptop panel off also sets Omarchy's `internal-monitor-disable` toggle, because its clamshell watcher re-enables an unflagged panel every couple of seconds; a profile that turns the panel off holds the same toggle while it is in force. Elsewhere this is a no-op. |
 
 ### On a plain Hyprland install

@@ -217,3 +217,16 @@ test("workspaceScript restores enabled monitors, focused one last", () => {
   const named = [{ ...edp, activeWorkspace: { id: -1337, name: 'odd "name"' } }];
   assert.equal(D.workspaceScript(named, ["eDP-1"]), 'hl.dispatch(hl.dsp.focus({ workspace = "name:odd \\"name\\"" }))');
 });
+
+test("colorOffers: hides what the panel can't do unless something uses it", () => {
+  const none = { hdr: false, tenBit: false };
+  const sdr = { cm: "srgb", bitdepth: 8, supports_hdr: 0 };
+  const offers = (support, configs) => plain(D.colorOffers(support, configs));
+  assert.deepEqual(offers(none, [sdr, sdr]), { hdr: false, tenBit: false });
+  assert.deepEqual(offers({ hdr: null, tenBit: null }, [sdr]), { hdr: true, tenBit: true });
+  assert.deepEqual(offers({ hdr: true, tenBit: true }, [sdr]), { hdr: true, tenBit: true });
+  // Saved HDR, a forced support flag, or 10-bit on screen keep their controls.
+  assert.deepEqual(offers(none, [sdr, { ...sdr, cm: "hdredid", bitdepth: 10 }]), { hdr: true, tenBit: true });
+  assert.deepEqual(offers(none, [{ ...sdr, supports_hdr: -1 }]), { hdr: true, tenBit: false });
+  assert.deepEqual(offers(none, [sdr, null, { cm: "srgb", bitdepth: 10 }]), { hdr: false, tenBit: true });
+});
