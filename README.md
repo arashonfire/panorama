@@ -40,9 +40,13 @@ brightness too, so you never have to hand-edit config files:
 | Hyprland   | 0.56.2         | **Lua config only** (`hyprland.lua`), which must require the saved file — see *On a plain Hyprland install*. Legacy `hyprland.conf` is not supported (Hyprland removes it in 0.57). |
 | Quickshell | 0.3.1          | Uses `Quickshell.Io` and `Quickshell.Hyprland` |
 | Qt         | 6.11           | |
+| `jq`       | required       | Reading `hyprctl` JSON and Omarchy's plugin list |
+| `gawk`, `util-linux` | required | `awk` in the brightness helper; `flock` so brightness keys don't pile up |
+| `lua`      | recommended    | `luac` checks the new `monitors.lua` before it replaces the old one; without it the file is written unchecked |
+| `libnotify` | optional      | `notify-send`, for messages from launches with no terminal |
 | `brightnessctl` | optional  | Laptop/backlight brightness |
 | `ddcutil`  | optional       | External monitor brightness, contrast and input over DDC/CI. Needs the `i2c-dev` module and access to `/dev/i2c-*` |
-| `edid-decode` | optional    | Enables the capability panel |
+| `edid-decode` | optional    | Enables the capability panel. Arch: in `v4l-utils` |
 | Omarchy    | optional       | On Omarchy, turning a laptop panel off also sets Omarchy's `internal-monitor-disable` toggle, because its clamshell watcher re-enables an unflagged panel every couple of seconds; a profile that turns the panel off holds the same toggle while it is in force. Elsewhere this is a no-op. |
 
 ### On a plain Hyprland install
@@ -86,12 +90,14 @@ bin/panorama --identify            # show each display's number on its screen
 bin/panorama --quit
 bin/panorama --revert              # put monitors.lua back as it was before the last save
 bin/panorama --backups             # list backups (~/.local/state/panorama/backups)
+bin/panorama --add-menu-row        # Setup > Display Settings in the Omarchy menu (plugin); --remove-menu-row
 ./install.sh                       # link `panorama` into ~/.local/bin + a menu entry for this checkout
 ./install.sh --uninstall
 (cd packaging/aur && PANORAMA_REPO=file://$PWD/../.. makepkg -si)   # system package from committed HEAD
 node --test tests/                 # unit tests for lib/
 tests/e2e/apply.sh                 # apply/keep/revert flow against a headless output
 tests/e2e/persist.sh               # backup/write/restore helper on temp files
+tests/e2e/menu-row.sh              # --add-menu-row / --remove-menu-row on temp files
 tests/e2e/internal-flag.sh         # Omarchy laptop-panel toggle helper on temp files
 tests/e2e/save.sh                  # save + undo against a scratch copy of monitors.lua
 tests/e2e/color.sh [MONITOR]       # 10-bit, HDR, VRR on a real monitor (reverted; flickers)
@@ -353,18 +359,19 @@ Omarchy doesn't bind panels to keys, so add one in `~/.config/hypr/bindings.lua`
 o.bind("SUPER + CTRL + M", "Panorama", "omarchy-shell shell toggle com.arashlab.panorama")
 ```
 
-Once enabled, it adds **Setup › Display Settings** to the Omarchy menu by
-itself: the plugin's service writes the row into
-`~/.config/omarchy/extensions/omarchy-menu.jsonc` the first time the shell loads
-it, and the menu reloads the file on its own. Omarchy has no install hook
-or plugin menu API, so that file is the only way in, and it is handled with care:
+To put it in the Omarchy menu as **Setup › Display Settings**, ask for it:
 
-- it is added once (`~/.local/state/panorama/omarchy-menu-row` records that), so
-  deleting the row keeps it deleted;
-- a row already called `setup.panorama`, such as the one above, is left as it is;
-- if the menu can't parse the file as it stands, it isn't touched at all, since
-  one bad edit there silently empties every custom row;
-- the row hides itself once the plugin is removed.
+```bash
+~/.config/omarchy/plugins/com.arashlab.panorama/bin/panorama --add-menu-row
+```
+
+That adds one row to `~/.config/omarchy/extensions/omarchy-menu.jsonc`, the
+only place Omarchy takes menu rows from; nothing else in Panorama writes there.
+The menu reads that file all-or-nothing (one bad edit silently empties every
+custom row), so the edit is only written if the file still reads exactly as
+before plus the row. A row already called `setup.panorama`, such as the one
+above, is left as it is, and so is a file the menu can't read as it stands.
+The row hides itself if the plugin is removed; `--remove-menu-row` takes it out.
 
 Differences from running it standalone:
 
@@ -380,8 +387,30 @@ Differences from running it standalone:
 - IPC goes through the shell: `omarchy-shell panorama state`, while open.
 
 Plugins run unsandboxed inside the Omarchy shell. `omarchy plugin update`
-shows the diff before pulling, and `omarchy plugin remove com.arashlab.panorama`
-takes it out again.
+shows the diff before pulling.
+
+**Removing the plugin.**
+
+```bash
+~/.config/omarchy/plugins/com.arashlab.panorama/bin/panorama --remove-menu-row   # if you added it
+omarchy plugin remove com.arashlab.panorama
+```
+
+Then remove the key binding, if you added one. Removing the plugin doesn't
+undo what you saved with it, and it leaves these behind on purpose:
+
+- **Your monitor setup.** Panorama's section of `~/.config/hypr/monitors.lua`
+  (between `-- >>> panorama` and `-- <<< panorama <<<`) is your saved layout,
+  and Hyprland keeps loading it. Delete that section to go back to the rules
+  around it. If Panorama added `require("monitors")` to `hyprland.lua` for you,
+  that line stays too.
+- **Backups** of `monitors.lua` from every save, in
+  `~/.local/state/panorama/backups`.
+- **A laptop panel turned off** stays off: Omarchy's
+  `~/.local/state/omarchy/toggles/hypr/internal-monitor-disable.lua` keeps it so.
+  Turn the panel back on in Panorama before removing it, or delete that file.
+- Versions before the menu row became opt-in left a marker,
+  `~/.local/state/panorama/omarchy-menu-row`; it can go.
 
 **Scale hotkeys (SUPER + / and SUPER + ALT + /).** Omarchy's
 `omarchy-hyprland-monitor-scaling` changes the scale live and records it in
@@ -397,7 +426,7 @@ resets the position to `auto`, which Save pins back to real coordinates.
 Panorama.qml              the app: window, keys, IPC, per-screen overlays
 shell.qml                 entry point: its own Quickshell instance (bin/panorama)
 Panel.qml                 entry point: Omarchy shell plugin panel
-Service.qml               entry point: Omarchy shell plugin service (adds the menu row once)
+omarchy-menu.qml          one-shot config behind --add-menu-row / --remove-menu-row
 manifest.json             Omarchy plugin manifest (id com.arashlab.panorama)
 
 services/                 singletons
@@ -417,7 +446,7 @@ lib/                      pure JS (unit tested with node)
   lua.js block.js match.js          Lua serialization, managed section, desc: matching
   profiles.js                       profile handler Lua + helpers
   edid.js globals.js brightness.js
-  menu.js                           the Omarchy menu row, added without breaking the file
+  menu.js                           the Omarchy menu row, added and removed without breaking the file
 
 ui/
   LayoutCanvas.qml MonitorTile.qml  drag-to-arrange canvas

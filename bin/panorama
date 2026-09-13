@@ -22,10 +22,16 @@ Options:
   --resend-hdr Fix a washed-out HDR display (after a sleep, say) by switching the
                focused monitor to sRGB and back, which makes Hyprland tell the
                panel it is in HDR again (needs Panorama running).
+  --add-menu-row
+               Add Setup > Display Settings to the Omarchy menu, opening the
+               Panorama plugin (~/.config/omarchy/extensions/omarchy-menu.jsonc)
+  --remove-menu-row
+               Take that row out again
   -h, --help   Show this help
 
-With Panorama enabled as an Omarchy shell plugin, these reach the panel in the
-Omarchy shell instead of starting a separate Panorama.
+With Panorama enabled as an Omarchy shell plugin, the options that talk to a
+running Panorama reach the panel in the Omarchy shell instead of starting a
+separate one.
 EOF
 }
 
@@ -87,8 +93,24 @@ ipc_reply() {
   fi
 }
 
+# The Omarchy menu row, only on request. The edit itself is lib/menu.js, run by
+# omarchy-menu.qml, which leaves the file alone unless the result still reads
+# exactly as before plus (or minus) the row.
+menu_row() {
+  command -v qs >/dev/null || die "Quickshell (qs) is not installed"
+  local out rc=0 message
+  out=$(PANORAMA_MENU_OP=$1 timeout 20 qs -p "$root/omarchy-menu.qml" 2>/dev/null) || rc=$?
+  message=$(sed -n 's/.*PANORAMA-MENU: //p' <<<"$out" | tail -n 1)
+  case $rc in
+    0 | 3) say "${message:-done}" ;;
+    *) die "${message:-could not edit the Omarchy menu (qs exited $rc)}" ;;
+  esac
+}
+
 case "${1:-}" in
   "") ;;
+  --add-menu-row) menu_row add; exit 0 ;;
+  --remove-menu-row) menu_row remove; exit 0 ;;
   --identify) ipc identify || die "not running"; exit 0 ;;
   --quit) ipc quit || true; exit 0 ;;
   --revert) revert; exit 0 ;;

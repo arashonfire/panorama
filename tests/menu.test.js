@@ -131,3 +131,57 @@ test("the row's guard fits the menu's batched guard script", { skip: !omarchyMod
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
+
+// Every check a removal must pass: the other rows as they were, ours gone.
+function assertRemoved(raw) {
+  const result = plain(M.removeEntry(raw));
+  assert.equal(result.write, true, `expected a write, got ${result.reason}`);
+  const before = plain(M.rows(raw));
+  const after = plain(M.rows(result.text));
+  assert.deepEqual(Object.keys(after), Object.keys(before).filter((k) => k !== M.ID));
+  for (const k of Object.keys(after)) assert.deepEqual(after[k], before[k], k);
+  if (omarchyModel) {
+    const items = omarchyModel.parseMenuJsonc(result.text);
+    assert.ok(!items.some((i) => i.id === M.ID), "Omarchy's parser no longer sees the row");
+    assert.equal(items.length, omarchyModel.parseMenuJsonc(raw).length - 1);
+  }
+  assert.deepEqual(plain(M.removeEntry(result.text)), { write: false, reason: "absent" });
+  return result.text;
+}
+
+test("removing what was added gives Omarchy's template back byte for byte", () => {
+  assert.equal(assertRemoved(assertAdded(template)), template);
+});
+
+test("removing after a row that gained a comma leaves that comma, which the menu allows", () => {
+  const raw = `{\n  "personal": {"icon":"","label":"Personal"}\n}\n`;
+  assert.equal(assertRemoved(assertAdded(raw)), `{\n  "personal": {"icon":"","label":"Personal"},\n}\n`);
+});
+
+test("the row can be removed with rows added after it", () => {
+  const added = assertAdded(`{\n  "personal": {"label":"Personal"}\n}\n`);
+  const grown = added.replace(/(\n  "setup\.panorama": \{.*\})\n}/, '$1,\n  "personal.notes": {"label":"Notes","action":"notes"}\n}');
+  const text = assertRemoved(grown);
+  assert.deepEqual(Object.keys(plain(M.rows(text))), ["personal", "personal.notes"]);
+});
+
+test("a row under our id that doesn't open the plugin is the user's: never removed", () => {
+  const raw = `{\n  "setup.panorama": {"icon":"󰍹","label":"Display Settings","action":"panorama"}\n}\n`;
+  assert.deepEqual(plain(M.removeEntry(raw)), { write: false, reason: "not-ours" });
+});
+
+test("nothing to remove: absent, missing or empty", () => {
+  for (const raw of [template, "", undefined, null])
+    assert.deepEqual(plain(M.removeEntry(raw)), { write: false, reason: "absent" });
+});
+
+test("removal leaves a file the menu can't read alone", () => {
+  const raw = assertAdded(template).replace("}\n", "} // inline\n");
+  assert.deepEqual(plain(M.removeEntry(raw)), { write: false, reason: "unreadable" });
+});
+
+test("our row reformatted across lines is left alone rather than half removed", () => {
+  const spread = assertAdded(template).replace(/("setup\.panorama": \{)/, "$1\n   ");
+  assert.equal(plain(M.rows(spread))[M.ID].action, M.ENTRY.action);
+  assert.deepEqual(plain(M.removeEntry(spread)), { write: false, reason: "unsupported" });
+});
