@@ -83,6 +83,7 @@ Item {
     function setBrightness(name: string, percent: int): void { Brightness.set(name, percent) }
     function stepSdrBrightness(name: string, spec: string): string { return Apply.stepSdrBrightness(name, spec) }
     function setSdrBrightness(name: string, value: real): void { Apply.setSdrBrightness(name, value) }
+    function resendHdr(name: string): string { return Apply.resendHdr(name) }
     function reset(): void { Draft.reset() }
     function apply(): void { Apply.apply() }
     function keep(): void { Apply.keep() }

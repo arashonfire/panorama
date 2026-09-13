@@ -19,6 +19,9 @@ Options:
                Change the focused monitor's brightness (+5%, 5%-, 40%) with an
                on-screen display, for key bindings. With --hdr, a monitor in
                HDR gets its SDR brightness changed instead (needs Panorama running).
+  --resend-hdr Fix a washed-out HDR display (after a sleep, say) by switching the
+               focused monitor to sRGB and back, which makes Hyprland tell the
+               panel it is in HDR again (needs Panorama running).
   -h, --help   Show this help
 
 With Panorama enabled as an Omarchy shell plugin, these reach the panel in the
@@ -75,6 +78,15 @@ ipc() {
   fi
 }
 
+# Like ipc, but keeps the reply: for calls that answer with a message.
+ipc_reply() {
+  if hosted; then
+    omarchy-shell panorama "$@" 2>/dev/null
+  else
+    qs -p "$root" ipc call panorama "$@" 2>/dev/null
+  fi
+}
+
 case "${1:-}" in
   "") ;;
   --identify) ipc identify || die "not running"; exit 0 ;;
@@ -82,6 +94,7 @@ case "${1:-}" in
   --revert) revert; exit 0 ;;
   --backups) "$root/bin/panorama-persist" backups; exit 0 ;;
   --brightness) shift; exec "$root/bin/panorama-brightness" key "$@" ;;
+  --resend-hdr) reply=$(ipc_reply resendHdr focused) || die "not running: open Panorama first"; say "$reply"; exit 0 ;;
   -h | --help) usage; exit 0 ;;
   *) usage >&2; exit 2 ;;
 esac

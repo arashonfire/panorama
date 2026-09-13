@@ -18,6 +18,12 @@ Singleton {
   property string error: ""
   property string version: ""
   property date updatedAt: new Date()
+  // When the query behind the current `monitors` was launched. A caller that
+  // changed something at time T has a reading of the result once this is
+  // past T; `updatedAt` alone can belong to a query that was already in
+  // flight when the change landed.
+  property date freshAt: new Date(0)
+  property date _launchedAt: new Date(0)
 
   property string _raw: ""
   property bool _again: false
@@ -30,6 +36,7 @@ Singleton {
       _again = true
       return
     }
+    _launchedAt = new Date()
     query.running = true
   }
 
@@ -51,6 +58,7 @@ Singleton {
   function _ingest(text) {
     if (!text) return
     updatedAt = new Date()
+    freshAt = _launchedAt
     if (text === _raw) return
     try {
       monitors = M.sortMonitors(JSON.parse(text))

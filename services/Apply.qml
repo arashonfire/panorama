@@ -37,6 +37,9 @@ Singleton {
   property string _internalFlagWritten: ""
   property string _internalFlagPanel: ""
   property int _logStart: -1
+  // When the requested rules were handed to Hyprland. Verification only
+  // trusts a monitor reading taken after this.
+  property date _appliedAt: new Date(0)
   property bool _quitAfter: false
   property bool _expectReload: false
 
@@ -72,6 +75,7 @@ Singleton {
             root._revert("Hyprland rejected the change: " + output, true, true)
             return
           }
+          root._appliedAt = new Date()
           root.secondsLeft = root.timeout
           root.state = "confirming"
           countdown.restart()
@@ -200,6 +204,63 @@ Singleton {
       }
       root._sendSdr()
     })
+  }
+
+  // After a suspend the panel can drop out of HDR mode while Hyprland keeps
+  // rendering PQ, and everything looks washed out; Hyprland re-sends the HDR
+  // metadata only when the output's colour setup changes. This flips the
+  // monitor to sRGB and back to what it asked for (D.hdrResend), with a pause
+  // so the two changes reach the panel as two commits. Immediate, no
+  // countdown: it ends where it started. "" or "focused" picks the focused
+  // monitor (the command line). Returns what was done, or why not.
+  property string resending: ""
+  property var _resendSecond: null
+
+  function resendHdr(name) {
+    if (name === "" || name === "focused") {
+      var focused = Hypr.monitors.filter(function (m) { return m.focused })[0]
+      name = focused ? focused.name : ""
+    }
+    if (state !== "idle" || resending) return "busy"
+    var base = Draft.baseOf(name)
+    if (!base) return "no monitor " + name
+    var rules = D.hdrResend(base)
+    if (!rules) return name + " isn't set to HDR"
+    resending = name
+    _resendSecond = rules.second
+    resendRunner.run(["hyprctl", "eval", D.script([rules.first])], function (code, output) {
+      if (code !== 0 || output.trim().indexOf("error") === 0) {
+        root._resendDone("Hyprland rejected the sRGB step: " + output.trim(), true)
+        return
+      }
+      resendPause.restart()
+    })
+    return "re-sending HDR to " + name
+  }
+
+  function _resendDone(text, isError) {
+    resending = ""
+    _resendSecond = null
+    Hypr.refresh()
+    _say(text, isError)
+  }
+
+  Timer {
+    id: resendPause
+    interval: 2000
+    onTriggered: {
+      var name = root.resending
+      resendRunner.run(["hyprctl", "eval", D.script([root._resendSecond])], function (code, output) {
+        if (code !== 0 || output.trim().indexOf("error") === 0)
+          root._resendDone("Hyprland rejected the HDR step, " + name + " is left in sRGB: " + output.trim(), true)
+        else
+          root._resendDone("HDR re-sent to " + name + ".", false)
+      })
+    }
+  }
+
+  Command {
+    id: resendRunner
   }
 
   // Nothing unconfirmed is left live and Panorama can go. What going means is
@@ -375,20 +436,50 @@ Singleton {
       Hypr.refresh()
       Globals.refresh()
       root._restoreWorkspaces(root._enabledAfterApply())
-      verify.restart()
+      verify.begin()
     }
   }
 
+  // Compares against a reading of Hyprland's state taken after the change was
+  // handed over. A reading that was already in flight, or a slow hyprctl (a
+  // modeset blocks Hyprland's event loop), would otherwise describe the state
+  // before the change and report a fallback that never happened. Hyprland
+  // also applies a rule on the monitor's next frame, not on the eval itself,
+  // so a pass that finds issues is repeated once, a little later, before
+  // its findings are trusted.
   Timer {
     id: verify
     interval: 900
+    property int waited: 0
+    property bool again: false
+    function begin() {
+      waited = 0
+      again = false
+      restart()
+    }
     onTriggered: {
+      if (root.state !== "confirming") return
+      if (Hypr.freshAt < root._appliedAt) {
+        if (++waited <= 8) {
+          Hypr.refresh()
+          restart()
+        }
+        return
+      }
       var found = D.verify(root._requested, Hypr.monitors)
       Object.keys(root._globalsAfter).forEach(function (k) {
         if (Globals.values[k] !== root._globalsAfter[k])
           found.push("Hyprland kept " + G.option(k).label + " at " + G.label(k, Globals.values[k]) + ".")
       })
       root.issues = found
+      if (found.length && !again) {
+        again = true
+        root._appliedAt = new Date()
+        Hypr.refresh()
+        Globals.refresh()
+        restart()
+        return
+      }
       root._checkVrrLog()
     }
   }

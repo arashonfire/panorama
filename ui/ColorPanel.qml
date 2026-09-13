@@ -78,7 +78,11 @@ ColumnLayout {
 
   RowLayout {
     id: fallback
+    // Hyprland decided the panel can't do HDR. Not when support is forced on:
+    // then supportsHDR() is true regardless, and sRGB on screen means the
+    // rule hasn't landed, or something else is in the way.
     readonly property bool fellBack: M.isHdr(root.cfg.cm) && !M.isHdr(root.effectiveCm)
+                                     && !(root.cfg.supports_hdr === 1 && root.cfg.supports_wide_color === 1)
     visible: !Draft.isChanged(root.name) && !root.cfg.icc && root.cfg.cm !== "auto" && root.cfg.cm !== root.effectiveCm
     Layout.fillWidth: true
     Layout.leftMargin: root.labelIndent
@@ -100,6 +104,30 @@ ColumnLayout {
       visible: fallback.fellBack && root.cfg.supports_hdr !== 1
       text: "Force HDR"
       onClicked: root.setHdrSupport(1)
+    }
+  }
+
+  // Shown while the monitor is in HDR: the one situation where the panel can
+  // silently fall out of it (after a suspend) with Hyprland none the wiser.
+  RowLayout {
+    visible: M.isHdr(root.effectiveCm) && !root.cfg.icc && Apply.state === "idle"
+    Layout.fillWidth: true
+    Layout.leftMargin: root.labelIndent
+    spacing: Theme.space.md
+
+    Text {
+      Layout.fillWidth: true
+      wrapMode: Text.Wrap
+      text: "Washed out and greyish, say after a sleep? The panel may have dropped out of HDR without Hyprland noticing."
+      color: Theme.muted
+      font.family: Theme.fontFamily
+      font.pixelSize: Theme.font.caption
+    }
+
+    PButton {
+      text: Apply.resending === root.name ? "Re-sending…" : "Re-send HDR"
+      enabled: !Apply.resending
+      onClicked: Apply.resendHdr(root.name)
     }
   }
 

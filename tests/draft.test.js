@@ -74,6 +74,16 @@ test("toRule: complete for runtime, compact for the file", () => {
   assert.deepEqual(plain(D.toRule(D.merge(panoCfg, { enabled: false }))), { output: "PANO-1", disabled: true });
 });
 
+test("hdrResend is the same rule twice, sRGB in between, only for an HDR request", () => {
+  const hdr = D.merge(edpCfg, { cm: "hdredid", bitdepth: 10, supports_hdr: 1, supports_wide_color: 1 });
+  const rules = D.hdrResend(hdr);
+  assert.deepEqual(plain(rules.second), plain(D.toRule(hdr)));
+  assert.deepEqual(plain(rules.first), { ...plain(D.toRule(hdr)), cm: "srgb" }, "bit depth and the rest stay: no modeset");
+  assert.equal(D.hdrResend(edpCfg), null, "not in HDR");
+  assert.equal(D.hdrResend(D.merge(hdr, { icc: "/x/panel.icc" })), null, "an ICC profile replaces the preset");
+  assert.equal(D.hdrResend(D.merge(hdr, { enabled: false })), null);
+});
+
 test("script produces one hl.monitor call per rule", () => {
   assert.equal(D.script([D.toRule(edpCfg, true)]),
     'hl.monitor({ output = "eDP-1", disabled = false, mode = "2560x1600@165", position = "0x0", scale = 1.6, transform = 0, mirror = "" })');
@@ -192,6 +202,9 @@ test("verify catches an HDR fallback and a refused 10-bit", () => {
   ]);
   // Forcing HDR alone isn't enough: Hyprland's supportsHDR() requires wide color.
   assert.match(D.verify([D.merge(edpCfg, { cm: "hdr", supports_hdr: 1 })], live)[0], /also needs wide color support/);
+  // With both forced, Hyprland can't have decided against HDR: say what's on screen, not why.
+  assert.deepEqual(plain(D.verify([D.merge(edpCfg, { cm: "hdredid", supports_hdr: 1, supports_wide_color: 1 })], live)),
+                   ["eDP-1 shows sRGB instead of HDR (EDID primaries, PQ)."]);
   assert.deepEqual(plain(D.verify([D.merge(edpCfg, { cm: "auto" })], live)), [], "auto resolves to a concrete preset");
   const hdrLive = [{ ...edp, colorManagementPreset: "hdr", currentFormat: "XBGR2101010" }];
   assert.deepEqual(plain(D.verify([D.merge(edpCfg, { cm: "hdr", bitdepth: 10 })], hdrLive)), []);

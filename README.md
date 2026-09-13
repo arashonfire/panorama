@@ -99,6 +99,7 @@ tests/e2e/brightness.sh [MONITOR]  # brightness backend, app ↔ keys sync, HDR-
 tests/e2e/profiles.sh              # live profile switching on a headless output (file untouched)
 tests/e2e/nudge.sh                 # keyboard move (Alt+arrows) on a headless output (draft only)
 bin/panorama --brightness +5%      # what a brightness key binding runs (see Brightness below)
+bin/panorama --resend-hdr          # fix a washed-out HDR display after a sleep (see HDR below)
 ```
 
 `install.sh` writes the desktop entry rather than copying it, with `Exec` set to
@@ -236,6 +237,7 @@ Taken from `/usr/share/hypr/stubs/hl.meta.lua` in Hyprland 0.56:
 | `sdr_min_luminance`, `sdr_max_luminance` | HDR advanced |
 | `min_luminance`, `max_luminance`, `max_avg_luminance` | HDR overrides, prefilled from EDID |
 | `supports_hdr`, `supports_wide_color` | "Force HDR support", offered when the EDID advertises HDR but Hyprland doesn't detect it |
+| (none) | "Re-send HDR", shown while a monitor is in HDR: after a sleep the panel can drop out of HDR while Hyprland keeps rendering for it, and everything looks washed out and grey. The button switches the monitor to sRGB and back two seconds later, which makes Hyprland send the HDR metadata again. `panorama --resend-hdr` does the same for the focused monitor, for a key binding. |
 | `icc` | File picker |
 | `reserved_area` | Advanced |
 
