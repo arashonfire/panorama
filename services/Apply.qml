@@ -324,7 +324,9 @@ Singleton {
 
   // Complete runtime rules for `configs` plus the global options, as one
   // script. Monitors whose VRR setting changes compared to `previous` get a
-  // nudged rule first, because Hyprland ignores vrr-only rule changes.
+  // nudged rule first, because Hyprland ignores vrr-only rule changes. The
+  // nudge makes the new vrr part of the active rule; the main script that
+  // follows is what reliably makes Hyprland apply it (see D.nudged).
   function _send(configs, previous, globals, callback) {
     var rules = configs.map(function (c) { return D.toRule(c) })
     var main = [D.script(rules), G.script(globals)].filter(function (s) { return s.length > 0 }).join("\n")
@@ -343,7 +345,8 @@ Singleton {
         callback(false, output)
         return
       }
-      // Hyprland activates rules on its next refresh; let the nudge land first.
+      // Hyprland activates rules on its next frame; let the nudge land first,
+      // so the VRR check the main script triggers sees the new value.
       later.run(500, function () { root._eval(main, callback) })
     })
   }
