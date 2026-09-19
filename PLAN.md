@@ -532,10 +532,14 @@ Not done / not tested:
       tone-mapped from 10000 nits; a `tonemap = 0` window rule avoids it)
 - [ ] Manual HDR calibration: set `min_luminance`, `max_luminance` and
       `max_avg_luminance` by eye from PQ test patterns shown through mpv with
-      `tonemap = 0` (`spikes/hdr-peak.sh` proves the peak pattern: on eDP-1 the
-      1000-nit square was barely visible and 1100 vanished, EDID says 1107).
-      Next: black-level and full-screen patterns, then a wizard in the Color
-      panel. ICC can't cover HDR: an ICC profile replaces the preset.
+      `tonemap = 0`. `spikes/hdr-patterns.sh` has `peak`, `black` and `full`
+      patterns. On eDP-1 (EDID: 1107 peak, 497 full frame, 0.001 min):
+      `peak` — 1000 barely visible, 1100 gone; `black` — 0.002 barely visible;
+      `full` — about 1000, the same as `peak`, so the panel dims a bright
+      screen as a whole (ABL) rather than clipping, and the EDID's 497 stands.
+      This panel's EDID is accurate; the wizard matters more where it isn't
+      (the LG TV is next to try). Then a wizard in the Color panel: `full`
+      only suggests a value when it clips clearly below `peak`. ICC can't cover HDR: an ICC profile replaces the preset.
 - [ ] Investigate (Hyprland / NVIDIA): after repeated HDR ↔ sRGB switches the
       OLED stayed in HDR mode (backlight ignored) while Hyprland reported
       sRGB; one more HDR on/off cleared it. Needs a reliable repro first.

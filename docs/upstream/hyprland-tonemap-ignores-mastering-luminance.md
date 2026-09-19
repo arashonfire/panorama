@@ -41,7 +41,7 @@ says: 200 is clearly mid-gray, 1000 is barely visible, 1100 is gone.
 ## Repro
 
 ```sh
-# spikes/hdr-peak.sh in Panorama draws the pattern and runs mpv like this:
+# spikes/hdr-patterns.sh in Panorama draws the pattern and runs mpv like this:
 mpv --fs --image-display-duration=inf --vo=gpu-next --target-colorspace-hint=yes \
   --vf=format=gamma=pq:primaries=bt.2020 --target-trc=pq --target-prim=bt.2020 \
   --target-peak=1107 --tone-mapping=clip --hdr-compute-peak=no pattern.png
