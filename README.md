@@ -341,7 +341,8 @@ test patterns, one after another:
 
 Each pattern covers the display until you press q; then you answer in
 Panorama. Where a first round leaves a wide gap, a second one shows squares in
-smaller steps. The result goes into the draft, to apply and save like any other
+smaller steps, from the last square seen to a bit past the first that vanished
+(at least 100 nits), in case the first reading was low. The result goes into the draft, to apply and save like any other
 change.
 
 - **TVs:** turn off the TV's own tone mapping and picture enhancements first

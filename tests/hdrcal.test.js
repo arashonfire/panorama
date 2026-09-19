@@ -40,17 +40,24 @@ test("the laptop OLED: close enough after one round", () => {
   assert.equal(run("peak", 1107.128, [1107]).value, 1107);
 });
 
-test("the LG TV: a second, finer round between the bracketing squares", () => {
+test("the LG TV: a second, finer round from the last square seen to past the first that vanished", () => {
   const coarse = C.answer(C.start("peak", null), 800);
-  assert.deepEqual(plain(coarse), { test: "peak", round: "fine", limit: 4000, tiles: [600, 650, 700, 750, 800] });
+  assert.deepEqual(plain(coarse), { test: "peak", round: "fine", limit: 4000, tiles: [600, 650, 700, 750, 800, 850, 900] });
   assert.equal(run("peak", null, [800, 700]).value, 700);
-  // Nothing vanished in the fine round before the control: the top of the bracket.
-  assert.equal(run("full", null, [700, 4000]).value, 700);
+  // The TV's full-screen reading: 700 vanished at first, 750 in the closer look.
+  assert.deepEqual(plain(C.answer(C.start("full", null), 700).tiles), [500, 550, 600, 650, 700, 750, 800]);
+  assert.equal(run("full", null, [700, 750]).value, 750);
+  // Nothing vanished in the fine round before the control: at least its top square.
+  assert.equal(run("full", null, [700, 4000]).value, 800);
+});
+
+test("the finer round stays below the clip level", () => {
+  assert.deepEqual(plain(C.answer(C.start("full", 1107.128), 1050).tiles), [875, 925, 975, 1025, 1075]);
 });
 
 test("the first square vanishing, or only the control, still brackets a range", () => {
-  assert.deepEqual(plain(C.answer(C.start("peak", null), 600).tiles), [300, 350, 400, 450, 500, 550, 600]);
-  assert.deepEqual(plain(C.answer(C.start("peak", null), 4000).tiles), [3000, 3250, 3500, 3750, 4000]);
+  assert.deepEqual(plain(C.answer(C.start("peak", null), 600).tiles), [300, 400, 500, 600, 700, 800]);
+  assert.deepEqual(plain(C.answer(C.start("peak", null), 4000).tiles), [3000, 3250, 3500, 3750]);
 });
 
 test("a visible control stops the test", () => {
@@ -66,7 +73,7 @@ test("black level is the square before the first visible one", () => {
 });
 
 test("summary: a full-screen reading at the peak is left to the EDID", () => {
-  const tvResults = { peak: run("peak", null, [800, 700]), full: run("full", null, [700, 4000]), black: run("black", null, [0.01]) };
+  const tvResults = { peak: run("peak", null, [800, 700]), full: run("full", null, [700, 750]), black: run("black", null, [0.01]) };
   const s = plain(C.summarize(tvResults, tv));
   assert.deepEqual(s.fields, { max_luminance: 700, max_avg_luminance: -1, min_luminance: 0.005 });
   assert.match(s.notes[0], /left unset/);

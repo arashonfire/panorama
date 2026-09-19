@@ -214,7 +214,7 @@ Item {
             Layout.fillWidth: true
             wrapMode: Text.Wrap
             text: root.cal && root.cal.round === "fine"
-                  ? "A closer look: squares in smaller steps between the last one you saw and the first that vanished."
+                  ? "A closer look: squares in smaller steps, from the last one you saw to a bit past the first that vanished."
                   : root.instructions[root.test] || ""
             color: Theme.muted
             font.family: Theme.fontFamily
