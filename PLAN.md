@@ -541,7 +541,10 @@ Not done / not tested:
       The LG TV (HDMI-A-1) is that case: its EDID has no luminance at all, so
       Hyprland advertises 10000 nits to clients. In Vivid mode the TV's own
       region-based processing made even the control square visible; in Game
-      mode with HGIG: peak ~800, full ~700, black ~0.01. The wizard must say
+      mode with HGIG, refined: peak 650–700 (clips at ~700), full 700–750 (the
+      same as peak within eye precision, so ABL again: leave
+      `max_avg_luminance` unset), black 0.01 first visible (use 0.005).
+      Suggested TV values: max 700, min 0.005. The wizard must say
       to switch the TV to HGIG / no dynamic processing first, and treat a
       visible control as "the display is altering the picture". Then a wizard in the Color panel: `full`
       only suggests a value when it clips clearly below `peak`. ICC can't cover HDR: an ICC profile replaces the preset.
