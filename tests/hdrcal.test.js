@@ -65,15 +65,32 @@ test("a visible control stops the test", () => {
   assert.match(r.error, /HGIG/);
 });
 
-test("black level is the square before the first visible one", () => {
-  assert.equal(run("black", null, [0.01]).value, 0.005);
-  assert.equal(run("black", 1107, [0.002]).value, 0.001);
+test("black level is the square before the first visible one, after a closer look", () => {
+  // The reading that looked wrong: 0.05 first visible gives 0.02, and why.
+  const coarse = C.answer(C.start("black", null), 0.05);
+  assert.deepEqual(plain(coarse.tiles), [0.015, 0.02, 0.025, 0.03, 0.035, 0.04, 0.045, 0.05]);
+  const r = run("black", null, [0.05, 0.035]);
+  assert.equal(r.value, 0.03);
+  assert.equal(r.note, "0.03 nits is the brightest square that still looked black; 0.035 was the first you could see.");
+  // The TV's and the laptop's readings.
+  assert.equal(run("black", null, [0.01, 0.006]).value, 0.005);
+  assert.equal(run("black", 1107, [0.002, 0.0015]).value, 0.001);
   assert.equal(run("black", 1107, [0.001]).value, 0.0005);
   assert.match(run("black", null, ["none"]).note, /crushes shadows/);
+  assert.match(run("black", null, [0.05, "none"]).note, /closer look/);
+});
+
+test("finer black squares are at least one 10-bit code apart", () => {
+  for (const first of [0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2]) {
+    const tiles = C.answer(C.start("black", null), first).tiles;
+    assert.ok(tiles.length >= 3 && tiles.length <= 8, first + ": " + tiles.length + " squares");
+    assert.equal(tiles[tiles.length - 1], first, first + " ends at the first square seen");
+    for (let i = 1; i < tiles.length; i++) assert.ok(C.codeGap(tiles[i - 1], tiles[i]) >= 1, first + ": " + tiles[i - 1] + " → " + tiles[i]);
+  }
 });
 
 test("summary: a full-screen reading at the peak is left to the EDID", () => {
-  const tvResults = { peak: run("peak", null, [800, 700]), full: run("full", null, [700, 750]), black: run("black", null, [0.01]) };
+  const tvResults = { peak: run("peak", null, [800, 700]), full: run("full", null, [700, 750]), black: run("black", null, [0.01, 0.006]) };
   const s = plain(C.summarize(tvResults, tv));
   assert.deepEqual(s.fields, { max_luminance: 700, max_avg_luminance: -1, min_luminance: 0.005 });
   assert.match(s.notes[0], /left unset/);

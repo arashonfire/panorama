@@ -337,7 +337,7 @@ test patterns, one after another:
 |---|---|---|
 | Peak | Squares of rising brightness, each in a frame at the brightest level sent. The first square that vanishes into its frame is the peak. | `max_luminance` |
 | Full screen | The same on a whole bright screen. Used only when it clips clearly below the peak; otherwise the display dims a bright screen as a whole, which an eye test can't measure, and the EDID's value stays. | `max_avg_luminance` |
-| Black level | Near-black squares on black. The square before the first visible one. | `min_luminance` |
+| Black level | Near-black squares on black, then a closer look in smaller steps. The square before the first visible one: the brightest that still looked black. | `min_luminance` |
 
 Each pattern covers the display until you press q; then you answer in
 Panorama. Where a first round leaves a wide gap, a second one shows squares in
