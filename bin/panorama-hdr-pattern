@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# HDR test patterns for calibrating by eye (lib/hdrcal.js decides what to show
+# and what the answers mean). A pattern is a row of squares at exact
+# luminances, drawn as PQ code values and shown full screen through mpv:
+#
+#   peak   each square inside a frame at LIMIT nits, together ~9% of the screen
+#   full   squares on a whole screen at LIMIT nits
+#   black  squares on black, with dim labels
+#
+# `peak` and `full` add a control square at LIMIT, identical to its surround.
+#
+#   panorama-hdr-pattern check                            print missing tools; exit 1 if any
+#   panorama-hdr-pattern show MODE MONITOR LIMIT TILE...  show on MONITOR until closed (q)
+#   panorama-hdr-pattern draw MODE WIDTH HEIGHT LIMIT OUT TILE...  only write the PNG
+#
+# mpv writes PQ / BT.2020, hard-clipped at LIMIT. Hyprland 0.56 would tone-map
+# it all the same: it takes a surface's peak only from `luminances`, which mpv
+# doesn't send, so PQ counts as 10000 nits (docs/upstream/
+# hyprland-tonemap-ignores-mastering-luminance.md). A `tonemap = 0` window rule
+# for this app id alone turns that off until the next config reload.
+set -euo pipefail
+
+app_id=panorama-hdr-test
+
+die() {
+  echo "panorama-hdr-pattern: $*" >&2
+  exit "${2:-1}"
+}
+
+check() {
+  local missing=0 tool
+  for tool in mpv magick fc-match hyprctl jq; do
+    command -v "$tool" >/dev/null || { echo "$tool"; missing=1; }
+  done
+  return "$missing"
+}
+
+# nits → PQ signal in percent (SMPTE ST 2084).
+pq() {
+  awk -v y="$1" 'BEGIN {
+    m1 = 2610 / 16384; m2 = 2523 / 4096 * 128
+    c1 = 3424 / 4096; c2 = 2413 / 4096 * 32; c3 = 2392 / 4096 * 32
+    p = (y / 10000) ^ m1
+    printf "gray(%.4f%%)", 100 * ((c1 + c2 * p) / (1 + c3 * p)) ^ m2
+  }'
+}
+
+draw() {
+  local mode=$1 w=$2 h=$3 limit=$4 out=$5
+  shift 5
+  local tiles=("$@") label title background
+  case $mode in
+    peak | full) tiles+=("$limit") ;;
+    black) ;;
+    *) die "unknown pattern: $mode" 2 ;;
+  esac
+  case $mode in
+    peak)
+      background=$(pq 0) label=$(pq 100)
+      title="Which squares can you still see? Note the first one that vanishes into its frame, then press q." ;;
+    full)
+      background=$(pq "$limit") label=$(pq 100)
+      title="Which squares can you still see? Note the first one that vanishes, then press q. Closes in 30 s." ;;
+    black)
+      # Dim labels keep the eye dark-adapted.
+      background=$(pq 0) label=$(pq 10)
+      title="Which squares can you see? Note the first one that shows, then press q." ;;
+  esac
+
+  local n=${#tiles[@]} side=$((w / 12))
+  local gap=$(((w - n * side) / (n + 1))) top=$(((h - side) / 2)) q=$((w / 48)) pt=$((w / 84))
+  local font args=(-size "${w}x${h}" "xc:$background" -depth 16)
+  font=$(fc-match -f '%{file}' sans-serif 2>/dev/null || true)
+  [[ -n $font ]] && args+=(-font "$font")
+  local i x y text
+  for i in "${!tiles[@]}"; do
+    y=${tiles[$i]}
+    x=$((gap + i * (side + gap)))
+    if [[ $mode == peak ]]; then
+      args+=(-fill "$(pq "$limit")" -draw "rectangle $x,$top $((x + side - 1)),$((top + side - 1))")
+      args+=(-fill "$(pq "$y")" -draw "rectangle $((x + q)),$((top + q)) $((x + side - q - 1)),$((top + side - q - 1))")
+    else
+      args+=(-fill "$(pq "$y")" -draw "rectangle $x,$top $((x + side - 1)),$((top + side - 1))")
+    fi
+    text=$(awk -v y="$y" 'BEGIN { printf "%g", y }')
+    [[ $mode != black && $i -eq $((n - 1)) ]] && text+=" (control)"
+    args+=(-fill "$label" -pointsize "$pt" -gravity NorthWest -annotate "+$x+$((top + side + side / 8))" "$text")
+  done
+  args+=(-fill "$label" -pointsize "$pt" -gravity North -annotate "+0+$((h / 8))" "$title")
+  magick "${args[@]}" -strip "PNG48:$out"
+}
+
+show() {
+  local mode=$1 monitor=$2 limit=$3
+  shift 3
+  local info cm w h transform
+  info=$(hyprctl monitors -j | jq -c --arg n "$monitor" '.[] | select(.name == $n)')
+  [[ -n $info ]] || die "no active monitor $monitor"
+  cm=$(jq -r .colorManagementPreset <<<"$info")
+  [[ $cm == hdr || $cm == hdredid ]] || die "$monitor is showing \"$cm\", not HDR"
+  w=$(jq -r .width <<<"$info")
+  h=$(jq -r .height <<<"$info")
+  transform=$(jq -r '.transform // 0' <<<"$info")
+  ((transform % 2)) && { local t=$w; w=$h; h=$t; }
+
+  # Global: the EXIT trap runs after this function's locals are gone.
+  tmpdir=$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/panorama-hdr.XXXXXX")
+  trap 'rm -rf "$tmpdir"' EXIT
+  draw "$mode" "$w" "$h" "$limit" "$tmpdir/pattern.png" "$@"
+
+  local reply
+  reply=$(hyprctl eval "hl.window_rule({ match = { class = \"^$app_id\$\" }, tonemap = 0 })" 2>&1) || true
+  [[ $reply == ok* ]] || die "Hyprland can't turn off tone mapping for the pattern window: $reply" 3
+
+  # Nearest-neighbour scaling: a scaler rings at the sharp square edges and
+  # outlines squares that should vanish. A full screen at peak is hard on an
+  # OLED, so that one closes by itself.
+  local duration=inf
+  [[ $mode == full ]] && duration=30
+  mpv --no-config --really-quiet --osd-level=0 --wayland-app-id="$app_id" \
+    --fs --fs-screen-name="$monitor" --image-display-duration="$duration" \
+    --vo=gpu-next --target-colorspace-hint=yes \
+    --vf=format=gamma=pq:primaries=bt.2020 \
+    --target-trc=pq --target-prim=bt.2020 --target-peak="$limit" --target-contrast=inf \
+    --tone-mapping=clip --gamut-mapping-mode=clip --hdr-compute-peak=no \
+    --scale=nearest --dscale=nearest --correct-downscaling=no --sigmoid-upscaling=no \
+    "$tmpdir/pattern.png"
+}
+
+case ${1:-} in
+  check) check ;;
+  show) (($# >= 5)) || die "usage: show MODE MONITOR LIMIT TILE..." 2; shift; show "$@" ;;
+  draw) (($# >= 7)) || die "usage: draw MODE WIDTH HEIGHT LIMIT OUT TILE..." 2; shift; draw "$@" ;;
+  *) die "usage: panorama-hdr-pattern check | show MODE MONITOR LIMIT TILE... | draw MODE WIDTH HEIGHT LIMIT OUT TILE..." 2 ;;
+esac

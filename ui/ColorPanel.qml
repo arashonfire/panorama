@@ -30,6 +30,9 @@ ColumnLayout {
   readonly property var tristate: [{ value: 0, label: "Auto" }, { value: 1, label: "On" }, { value: -1, label: "Off" }]
   readonly property var eotfLabels: ({ "default": "Default", "auto": "Auto", "srgb": "sRGB", "gamma22": "Gamma 2.2", "gamma22force": "Gamma 2.2 (forced)" })
 
+  // The calibration dialog lives in the main window (it covers it).
+  signal calibrateHdr()
+
   function changed(key) { return !D.sameField(key, cfg[key], base[key]) }
   function set(fields) { Draft.set(name, fields) }
 
@@ -304,6 +307,24 @@ ColumnLayout {
     SectionHeader { title: "Panel luminance" }
 
     SettingRow {
+      label: "By eye"
+      PButton {
+        text: "Calibrate…"
+        enabled: M.isHdr(root.effectiveCm) && Apply.state === "idle"
+        onClicked: root.calibrateHdr()
+      }
+      Text {
+        Layout.fillWidth: true
+        wrapMode: Text.Wrap
+        text: M.isHdr(root.effectiveCm) ? "measure peak, full-screen and black level with test patterns"
+                                        : "apply HDR first, then measure with test patterns"
+        color: Theme.muted
+        font.family: Theme.fontFamily
+        font.pixelSize: Theme.font.caption
+      }
+    }
+
+    SettingRow {
       label: "Override"
       changed: root.changed("max_luminance") || root.changed("max_avg_luminance") || root.changed("min_luminance")
       Toggle {
@@ -340,7 +361,13 @@ ColumnLayout {
         suffix: "nits"
         onCommitted: v => root.set({ max_luminance: Math.round(v) })
       }
-      Item { Layout.fillWidth: true }
+      Text {
+        Layout.fillWidth: true
+        text: root.cfg.max_luminance < 0 ? "unset: from the EDID" : ""
+        color: Theme.muted
+        font.family: Theme.fontFamily
+        font.pixelSize: Theme.font.caption
+      }
     }
 
     SettingRow {
@@ -355,7 +382,13 @@ ColumnLayout {
         suffix: "nits"
         onCommitted: v => root.set({ max_avg_luminance: Math.round(v) })
       }
-      Item { Layout.fillWidth: true }
+      Text {
+        Layout.fillWidth: true
+        text: root.cfg.max_avg_luminance < 0 ? "unset: from the EDID" : ""
+        color: Theme.muted
+        font.family: Theme.fontFamily
+        font.pixelSize: Theme.font.caption
+      }
     }
 
     SettingRow {
@@ -367,11 +400,17 @@ ColumnLayout {
         value: root.cfg.min_luminance
         from: 0
         to: 10
-        decimals: 3
+        decimals: 4
         suffix: "nits"
         onCommitted: v => root.set({ min_luminance: v })
       }
-      Item { Layout.fillWidth: true }
+      Text {
+        Layout.fillWidth: true
+        text: root.cfg.min_luminance < 0 ? "unset: from the EDID" : ""
+        color: Theme.muted
+        font.family: Theme.fontFamily
+        font.pixelSize: Theme.font.caption
+      }
     }
   }
 

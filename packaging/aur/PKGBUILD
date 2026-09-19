@@ -29,6 +29,8 @@ optdepends=(
   'ddcutil: brightness and DDC/CI controls for external monitors'
   'brightnessctl: backlight control outside Omarchy'
   'libnotify: brightness notifications outside Omarchy'
+  'mpv: HDR calibration test patterns'
+  'imagemagick: HDR calibration test patterns'
 )
 makedepends=('git')
 provides=("$_name")

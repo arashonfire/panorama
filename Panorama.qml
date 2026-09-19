@@ -18,7 +18,8 @@ Item {
   property bool saveDialogOpen: false
   property bool profilesOpen: false
   property bool helpOpen: false
-  readonly property bool dialogOpen: saveDialogOpen || profilesOpen || helpOpen
+  property string calibrating: ""
+  readonly property bool dialogOpen: saveDialogOpen || profilesOpen || helpOpen || calibrating !== ""
   readonly property var selected: Hypr.byName(selectedName)
   // Something to save: live changes, or the file doesn't match the live state.
   readonly property bool canOpenSave: Persist.canPrepareSave && (Apply.liveUnsaved || !Persist.saved)
@@ -95,6 +96,8 @@ Item {
     function closeSave(): void { app.saveDialogOpen = false }
     function openProfiles(): void { app.profilesOpen = true }
     function closeProfiles(): void { app.profilesOpen = false }
+    function openHdrCalibration(name: string): void { app.calibrating = name }
+    function closeHdrCalibration(): void { app.calibrating = "" }
 
     function addProfile(name: string): void { Persist.addProfile(name) }
     function renameProfile(index: int, name: string): void { Persist.renameProfile(index, name) }
@@ -134,7 +137,8 @@ Item {
           tab: inspector.tab,
           help: app.helpOpen,
           save: app.saveDialogOpen,
-          profiles: app.profilesOpen
+          profiles: app.profilesOpen,
+          calibrating: app.calibrating
         },
         persist: {
           path: Persist.path,
@@ -349,6 +353,7 @@ Item {
             Layout.fillHeight: true
             monitor: app.selected
             monitors: Hypr.monitors
+            onCalibrateHdr: name => app.calibrating = name
           }
         }
 
@@ -393,6 +398,16 @@ Item {
         open: app.profilesOpen
         onDismissed: {
           app.profilesOpen = false
+          main.forceActiveFocus()
+        }
+      }
+
+      HdrCalibration {
+        anchors.fill: parent
+        name: app.calibrating
+        open: app.calibrating !== ""
+        onDismissed: {
+          app.calibrating = ""
           main.forceActiveFocus()
         }
       }

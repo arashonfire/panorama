@@ -530,7 +530,7 @@ Not done / not tested:
       takes a surface's peak only from `luminances`, so PQ clients that send
       mastering luminance / MaxCLL but no `luminances`, like mpv, are
       tone-mapped from 10000 nits; a `tonemap = 0` window rule avoids it)
-- [ ] Manual HDR calibration: set `min_luminance`, `max_luminance` and
+- [x] Manual HDR calibration: set `min_luminance`, `max_luminance` and
       `max_avg_luminance` by eye from PQ test patterns shown through mpv with
       `tonemap = 0`. `spikes/hdr-patterns.sh` has `peak`, `black` and `full`
       patterns. On eDP-1 (EDID: 1107 peak, 497 full frame, 0.001 min):
@@ -546,7 +546,13 @@ Not done / not tested:
       `max_avg_luminance` unset), black 0.01 first visible (use 0.005).
       Suggested TV values: max 700, min 0.005. The wizard must say
       to switch the TV to HGIG / no dynamic processing first, and treat a
-      visible control as "the display is altering the picture". Then a wizard in the Color panel: `full`
+      visible control as "the display is altering the picture".
+      Built: Color tab → Panel luminance → Calibrate… (ui/HdrCalibration.qml,
+      lib/hdrcal.js, bin/panorama-hdr-pattern). Coarse round, then a finer one
+      when the bracket is wider than 100 nits; the result goes into the draft.
+      Unit tests replay both displays' readings; tests/e2e/hdr-pattern.sh
+      checks the PNGs and the mpv/Hyprland calls with stubs. Not yet run
+      against a real display through the UI. Then a wizard in the Color panel: `full`
       only suggests a value when it clips clearly below `peak`. ICC can't cover HDR: an ICC profile replaces the preset.
 - [ ] Investigate (Hyprland / NVIDIA): after repeated HDR ↔ sRGB switches the
       OLED stayed in HDR mode (backlight ignored) while Hyprland reported

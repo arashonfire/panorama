@@ -47,6 +47,7 @@ brightness too, so you never have to hand-edit config files:
 | `libnotify` | optional      | `notify-send`, for messages from launches with no terminal |
 | `brightnessctl` | optional  | Laptop/backlight brightness |
 | `ddcutil`  | optional       | External monitor brightness, contrast and input over DDC/CI. Needs the `i2c-dev` module and access to `/dev/i2c-*` |
+| `mpv`, ImageMagick | optional | HDR calibration by eye: mpv shows the test patterns in HDR, ImageMagick (`magick`) draws them |
 | `edid-decode` | optional    | Enables the capability panel, and hiding HDR/10-bit settings a panel can't use (without it, all are shown). Arch: in `v4l-utils` |
 | Omarchy    | optional       | On Omarchy, turning a laptop panel off also sets Omarchy's `internal-monitor-disable` toggle, because its clamshell watcher re-enables an unflagged panel every couple of seconds; a profile that turns the panel off holds the same toggle while it is in force. Elsewhere this is a no-op. |
 
@@ -98,6 +99,7 @@ bin/panorama --add-menu-row        # Setup > Display Settings in the Omarchy men
 node --test tests/                 # unit tests for lib/
 tests/e2e/apply.sh                 # apply/keep/revert flow against a headless output
 tests/e2e/persist.sh               # backup/write/restore helper on temp files
+tests/e2e/hdr-pattern.sh           # HDR test patterns: PQ values in the PNGs, mpv/Hyprland calls (stubbed)
 tests/e2e/menu-row.sh              # --add-menu-row / --remove-menu-row on temp files
 tests/e2e/internal-flag.sh         # Omarchy laptop-panel toggle helper on temp files
 tests/e2e/save.sh                  # save + undo against a scratch copy of monitors.lua
@@ -322,6 +324,42 @@ by itself while a fullscreen app shows HDR content, and back afterwards. On
 panels Hyprland misreads, like the test OLED, the forced HDR support is what
 makes auto HDR possible.
 
+### Calibrating HDR by eye
+
+A display's EDID states its peak, full-screen and black luminance, and Hyprland
+passes those on to games and players so they know how bright to go. EDIDs are
+often wrong or blank: the LG TV Panorama was tested with gives no luminance at
+all, so Hyprland assumes 10000 nits for it. **Calibrate…** in the Color tab's
+*Panel luminance* section (on a monitor showing HDR) measures them with three
+test patterns, one after another:
+
+| Test | Pattern | Sets |
+|---|---|---|
+| Peak | Squares of rising brightness, each in a frame at the brightest level sent. The first square that vanishes into its frame is the peak. | `max_luminance` |
+| Full screen | The same on a whole bright screen. Used only when it clips clearly below the peak; otherwise the display dims a bright screen as a whole, which an eye test can't measure, and the EDID's value stays. | `max_avg_luminance` |
+| Black level | Near-black squares on black. The square before the first visible one. | `min_luminance` |
+
+Each pattern covers the display until you press q; then you answer in
+Panorama. Where a first round leaves a wide gap, a second one shows squares in
+smaller steps. The result goes into the draft, to apply and save like any other
+change.
+
+- **TVs:** turn off the TV's own tone mapping and picture enhancements first
+  (Game mode with HDR tone mapping set to HGIG on LG and Samsung, no dynamic
+  contrast). Otherwise the TV alters the patterns. Each pattern has a control
+  square identical to its surround; if you can see it, that's what is
+  happening. Readings hold for the picture mode they were taken in.
+- **How the patterns are shown:** `bin/panorama-hdr-pattern` draws them as 16-bit
+  PQ images and shows them through mpv (`--vo=gpu-next`), hard-clipped at the
+  EDID's peak (4000 nits when there is none). Hyprland 0.56 would still
+  tone-map them, because it takes a window's peak only from a value mpv doesn't
+  send (see `docs/upstream/hyprland-tonemap-ignores-mastering-luminance.md`),
+  so the helper adds a `tonemap = 0` window rule for the pattern window alone.
+  It lasts until the next config reload.
+
+Measured so far: the laptop OLED matches its EDID (peak ~1050–1100, black
+~0.001–0.002 nits); the LG TV in HGIG clips at ~700 nits, black ~0.005.
+
 ## Omarchy integration
 
 The app runs as a **standalone** Quickshell config, so it works on any Hyprland
@@ -447,6 +485,7 @@ lib/                      pure JS (unit tested with node)
   lua.js block.js match.js          Lua serialization, managed section, desc: matching
   profiles.js                       profile handler Lua + helpers
   edid.js globals.js brightness.js
+  hdrcal.js                         HDR calibration by eye: test squares, answers → luminance
   menu.js                           the Omarchy menu row, added and removed without breaking the file
 
 ui/
@@ -454,13 +493,14 @@ ui/
   Inspector.qml                     Settings / Color / Details / Global tabs
   SettingsPanel.qml ColorPanel.qml GlobalPanel.qml InfoSection.qml
   ActionBar.qml BrightnessStrip.qml
-  SaveDialog.qml ProfilesDialog.qml KeysHelp.qml
+  SaveDialog.qml ProfilesDialog.qml KeysHelp.qml HdrCalibration.qml
   ConfirmOverlay.qml IdentifyOverlay.qml   per-screen layer-shell overlays
   PButton Toggle Dropdown Segmented Slider NumberField TextField SettingRow SectionHeader
 
 bin/panorama              launcher (float rule, single instance, IPC, --revert, --brightness)
 bin/panorama-persist      backup + atomic write + restore of monitors.lua
 bin/panorama-brightness   backlight / DDC / HDR SDR brightness; key handler
+bin/panorama-hdr-pattern  HDR test patterns (PQ, through mpv) for calibrating by eye
 share/applications/       desktop entry
 install.sh                per-user install into ~/.local
 tests/                    node unit tests, fixtures, e2e scripts

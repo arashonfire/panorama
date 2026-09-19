@@ -11,6 +11,7 @@ Rectangle {
   property var monitor: null
   property var monitors: []
   property string tab: "settings"
+  signal calibrateHdr(string name)
 
   color: Theme.alpha(Theme.foreground, 0.02)
   border.color: Theme.border
@@ -142,7 +143,10 @@ Rectangle {
         active: root.tab === "color" && !!root.monitor
         visible: active
         sourceComponent: Component {
-          ColorPanel { monitor: root.monitor }
+          ColorPanel {
+            monitor: root.monitor
+            onCalibrateHdr: root.calibrateHdr(root.monitor.name)
+          }
         }
       }
 
