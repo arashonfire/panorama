@@ -17,7 +17,8 @@
 #          the EDID value then.
 #
 # mpv writes PQ / BT.2020 with a hard clip at PEAK (default: the EDID's
-# desired content max, which Hyprland uses without a max_luminance override)
+# desired content max, which Hyprland uses without a max_luminance override;
+# 4000 with wider tiles when the EDID has none)
 # and no black-point lift. In `peak` and `full` the last tile sits at PEAK
 # and always vanishes: that's the control.
 #
@@ -50,10 +51,13 @@ if [ -z "${PEAK:-}" ]; then
   edid=$(ls /sys/class/drm/card*-"$MON"/edid 2>/dev/null | head -1 || true)
   PEAK=$( { [ -n "$edid" ] && edid-decode "$edid" 2>/dev/null; } |
     sed -n 's/.*Desired content max luminance: [0-9]* (\([0-9.]*\) cd\/m^2).*/\1/p' | head -1)
-  PEAK=${PEAK:-1000}
+  # No luminance in the EDID (common on TVs): test well past any panel.
+  [ -n "$PEAK" ] || { PEAK=4000; wide=1; echo "$MON's EDID gives no peak; testing up to $PEAK nits." >&2; }
 fi
 PEAK=$(printf '%.0f' "$PEAK")
 case $MODE in
+  peak) NITS=${NITS:-${wide:+"600 800 1000 1200 1500 2000 3000"}} ;;&
+  full) NITS=${NITS:-${wide:+"300 500 700 1000 1300 1600 2000"}} ;;&
   peak) NITS=${NITS:-"200 400 600 800 900 1000 1100"} ;;
   black) NITS=${NITS:-"0.001 0.002 0.005 0.01 0.02 0.05 0.1 0.2"} ;;
   full) NITS=${NITS:-"200 300 400 500 600 800 1000"} ;;
@@ -122,6 +126,8 @@ echo "$MON: ${W}x${H}, $cm, $MODE pattern, clipping at PEAK=$PEAK nits; tiles: $
 extra=()
 [ -n "${LOG:-}" ] && extra+=(--log-file="$LOG")
 read -r -a more <<<"${MPV_ARGS:-}" && extra+=("${more[@]}")
+# Nearest-neighbour scaling (below): a scaler rings at the sharp tile edges,
+# drawing outlines around squares that should vanish.
 # A full screen at peak for long is hard on an OLED; let that one close itself.
 duration=inf
 [ "$MODE" = full ] && duration=30
@@ -132,4 +138,5 @@ mpv --no-config --really-quiet --osd-level=0 "${extra[@]}" --wayland-app-id=pano
   --vf=format=gamma=pq:primaries=bt.2020 \
   --target-trc=pq --target-prim=bt.2020 --target-peak="$PEAK" --target-contrast=inf \
   --tone-mapping=clip --gamut-mapping-mode=clip --hdr-compute-peak=no \
+  --scale=nearest --dscale=nearest --correct-downscaling=no --sigmoid-upscaling=no \
   "$img"

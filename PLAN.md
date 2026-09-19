@@ -537,8 +537,13 @@ Not done / not tested:
       `peak` — 1000 barely visible, 1100 gone; `black` — 0.002 barely visible;
       `full` — about 1000, the same as `peak`, so the panel dims a bright
       screen as a whole (ABL) rather than clipping, and the EDID's 497 stands.
-      This panel's EDID is accurate; the wizard matters more where it isn't
-      (the LG TV is next to try). Then a wizard in the Color panel: `full`
+      This panel's EDID is accurate; the wizard matters more where it isn't.
+      The LG TV (HDMI-A-1) is that case: its EDID has no luminance at all, so
+      Hyprland advertises 10000 nits to clients. In Vivid mode the TV's own
+      region-based processing made even the control square visible; in Game
+      mode with HGIG: peak ~800, full ~700, black ~0.01. The wizard must say
+      to switch the TV to HGIG / no dynamic processing first, and treat a
+      visible control as "the display is altering the picture". Then a wizard in the Color panel: `full`
       only suggests a value when it clips clearly below `peak`. ICC can't cover HDR: an ICC profile replaces the preset.
 - [ ] Investigate (Hyprland / NVIDIA): after repeated HDR ↔ sRGB switches the
       OLED stayed in HDR mode (backlight ignored) while Hyprland reported
