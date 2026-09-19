@@ -71,7 +71,12 @@ Singleton {
   readonly property var profilesToSave: profiles.map(function (p) {
     return p === root.activeProfile ? P.capture(null, Hypr.monitors, root._rule, root._how, p) : p
   })
-  readonly property var lines: B.body(Hypr.monitors, parsed, matchBy, _requested, globalsToSave, profilesToSave)
+  // On or off for the base rules: what was applied this session, else the
+  // saved base rule (see lib/block.js body).
+  function _power(m) {
+    return Apply.appliedRules[m.name] || B.savedRequest(m, parsed) || null
+  }
+  readonly property var lines: B.body(Hypr.monitors, parsed, matchBy, _requested, globalsToSave, profilesToSave, _power)
 
   function addProfile(name) {
     if (activeProfile || !Hypr.monitors.length) return

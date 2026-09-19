@@ -215,6 +215,12 @@ hl.monitor({ output = "desc:Dell Inc. DELL U2723QE ABC123", disabled = false, mo
 - Each monitor is saved by port (`DP-2`) or as "this monitor" (`desc:…`,
   which follows it to any port). Laptop panels default to the port.
 - Rules for monitors that aren't plugged in right now are kept.
+- A monitor that's off is saved as `disabled = true` with its settings, so
+  turning it back on brings them back. Whether it's saved as on or off follows
+  what was asked through Panorama (applied this session, else the saved rule),
+  not what's live: Omarchy's laptop-display toggle or clamshell mode turning
+  the panel off isn't saved. A profile's on/off stays in that profile; the base
+  rules, used when no profile matches, keep their own.
 - Everything outside the markers (your own rules, Omarchy's `GDK_SCALE` env,
   comments) is left byte-for-byte untouched. The save preview lists rules
   outside the section that match a connected monitor: ones before it are

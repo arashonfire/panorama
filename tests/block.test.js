@@ -159,3 +159,28 @@ test("Omarchy's clamshell script can read the internal panel's rule", () => {
   assert.equal(value("scale"), "1.6");
   assert.equal(value("position"), "0x0");
 });
+
+// The laptop panel off, and why: Panorama applied it, a profile says it, or
+// something outside Panorama (Omarchy's toggle) did.
+test("saving a panel that's off: on/off from the request, settings kept", () => {
+  const savedLine = 'hl.monitor({ output = "eDP-1", disabled = false, mode = "2560x1600@165", position = "0x0", scale = 1.6, transform = 0, mirror = "", bitdepth = 10, cm = "hdredid", sdr_eotf = "gamma22", vrr = 3 })';
+  const saved = B.parse(B.render(stock, [savedLine, DELL_LINE]));
+  const edpOff = { ...edp, disabled: true, colorManagementPreset: "hdredid", currentFormat: "XBGR2101010" };
+  const docked = [edpOff, dell];
+
+  // Omarchy turned it off: nothing asked Panorama to, so the saved rule stands.
+  assert.equal(plain(B.body(docked, saved, {}))[0], savedLine);
+
+  // Turned off in Panorama (the applied rule is the request): off, settings kept.
+  const applied = (m) => (m.name === "eDP-1" ? { output: "eDP-1", disabled: true } : null);
+  assert.equal(plain(B.body(docked, saved, {}, applied, null, null, applied))[0], savedLine.replace("disabled = false", "disabled = true"));
+
+  // A running profile that turns it off (a bare rule, as older saves wrote)
+  // leaves the base rules' on/off alone, and its own entry gains the settings.
+  const profileOff = (m) => (m.name === "eDP-1" ? { output: "eDP-1", disabled: true } : null);
+  const savedPower = (m) => B.savedRequest(m, saved);
+  assert.equal(plain(B.body(docked, saved, {}, profileOff, null, null, savedPower))[0], savedLine);
+  const entry = plain(B.ruleTable(edpOff, docked, saved, "port", { output: "eDP-1", disabled: true }));
+  assert.deepEqual(entry, { output: "eDP-1", disabled: true, mode: "2560x1600@165", position: "0x0", scale: 1.6, transform: 0,
+                            mirror: "", bitdepth: 10, cm: "hdredid", sdr_eotf: "gamma22", vrr: 3 });
+});

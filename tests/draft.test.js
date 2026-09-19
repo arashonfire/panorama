@@ -74,6 +74,12 @@ test("toRule: complete for runtime, compact for the file", () => {
   assert.deepEqual(plain(D.toRule(D.merge(panoCfg, { enabled: false }))), { output: "PANO-1", disabled: true });
 });
 
+test("toRule: a saved rule for a monitor that's off keeps its settings", () => {
+  const off = D.merge(edpCfg, { enabled: false, cm: "hdredid", bitdepth: 10, sdr_eotf: "gamma22", vrr: 3 });
+  assert.deepEqual(plain(D.toRule(off, true)), { ...LAYOUT_RULE, disabled: true, bitdepth: 10, cm: "hdredid", sdr_eotf: "gamma22", vrr: 3 });
+  assert.deepEqual(plain(D.toRule(off)), { output: "eDP-1", disabled: true }, "a runtime rule only turns it off");
+});
+
 test("hdrResend is the same rule twice, sRGB in between, only for an HDR request", () => {
   const hdr = D.merge(edpCfg, { cm: "hdredid", bitdepth: 10, supports_hdr: 1, supports_wide_color: 1 });
   const rules = D.hdrResend(hdr);
@@ -184,6 +190,18 @@ test("expectedAfterReload takes enabled from the saved rule", () => {
   assert.equal(plain(D.expectedAfterReload(live, () => off))[0].scale, 1.6);
   assert.deepEqual(plain(D.verify(D.expectedAfterReload(live, (m) => (m.name === "eDP-1" ? off : null)),
     [{ ...edp, disabled: true }, headless])), [], "a reload that turns it off is no longer an issue");
+});
+
+// Omarchy's laptop-display toggle keeps the panel off whatever the file says,
+// and without it the reload turns the panel on: both are fine.
+test("expectedAfterReload: a file that says on for a panel that was off accepts either", () => {
+  const offLive = [{ ...edp, disabled: true }, headless];
+  const on = { output: "eDP-1", disabled: false };
+  const want = D.expectedAfterReload(offLive, (m) => (m.name === "eDP-1" ? on : null));
+  assert.deepEqual(plain(D.verify(want, offLive)), [], "still off");
+  assert.deepEqual(plain(D.verify(want, live)), [], "turned on");
+  assert.deepEqual(plain(D.verify(want, [{ ...edp, scale: 1.25 }, headless])), ["Hyprland adjusted eDP-1's scale to 1.25."],
+    "turned on, and then it's checked as usual");
 });
 
 test("verify reports what Hyprland did differently", () => {
