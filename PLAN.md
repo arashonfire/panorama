@@ -525,7 +525,17 @@ Not done / not tested:
       so bringing it back fails with `EINVAL` until a udev hotplug re-probe
       reassigns a usable one. An idle DPMS off on a single-panel laptop is
       enough: the machine then cannot wake. Not Panorama's doing, but Panorama's
-      turn-a-display-off is one of the ways in)
+      turn-a-display-off is one of the ways in),
+      `hyprland-tonemap-ignores-mastering-luminance.md` (`getCMSettings()`
+      takes a surface's peak only from `luminances`, so PQ clients that send
+      mastering luminance / MaxCLL but no `luminances`, like mpv, are
+      tone-mapped from 10000 nits; a `tonemap = 0` window rule avoids it)
+- [ ] Manual HDR calibration: set `min_luminance`, `max_luminance` and
+      `max_avg_luminance` by eye from PQ test patterns shown through mpv with
+      `tonemap = 0` (`spikes/hdr-peak.sh` proves the peak pattern: on eDP-1 the
+      1000-nit square was barely visible and 1100 vanished, EDID says 1107).
+      Next: black-level and full-screen patterns, then a wizard in the Color
+      panel. ICC can't cover HDR: an ICC profile replaces the preset.
 - [ ] Investigate (Hyprland / NVIDIA): after repeated HDR ↔ sRGB switches the
       OLED stayed in HDR mode (backlight ignored) while Hyprland reported
       sRGB; one more HDR on/off cleared it. Needs a reliable repro first.
