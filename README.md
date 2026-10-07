@@ -380,13 +380,21 @@ it:
 - sits alongside Omarchy's bar **Display** panel (quick brightness and scale)
   without replacing it. Panorama is the "full settings" view.
 
-**Omarchy menu.** Add an entry under Setup (next to Monitors, which still
-opens `monitors.lua` in the editor) in `~/.config/omarchy/extensions/omarchy-menu.jsonc`;
+**Omarchy menu.** Panorama can sit under Setup as **Display Settings**, next
+to Monitors (which still opens `monitors.lua` in the editor). With the plugin
+installed (below), add the row with `--add-menu-row`, not by hand. Running it
+standalone, add the row yourself to `~/.config/omarchy/extensions/omarchy-menu.jsonc`;
 the menu reloads on save:
 
 ```jsonc
 "setup.panorama": {"icon":"󰍹","label":"Display Settings","description":"Panorama: monitors, HDR, VRR, brightness, profiles","aliases":["panorama"],"action":"panorama"}
 ```
+
+That `action` only works where the menu can find `panorama`: the AUR package
+installs `/usr/bin/panorama`, but `install.sh` links it into `~/.local/bin`,
+which the session's PATH may not include. From a checkout, put the absolute
+path to `bin/panorama` there instead. The menu shows nothing when an action
+fails, so a row that can't find its command just does nothing when clicked.
 
 `omarchy menu summon panorama` then opens it directly.
 
@@ -415,8 +423,10 @@ That adds one row to `~/.config/omarchy/extensions/omarchy-menu.jsonc`, the
 only place Omarchy takes menu rows from; nothing else in Panorama writes there.
 The menu reads that file all-or-nothing (one bad edit silently empties every
 custom row), so the edit is only written if the file still reads exactly as
-before plus the row. A row already called `setup.panorama`, such as the one
-above, is left as it is, and so is a file the menu can't read as it stands.
+before plus the row. A row already called `setup.panorama`, such as the
+standalone one above, is left as it is, and it says so; delete
+that row first to swap it for the plugin's. A file the menu can't read as it
+stands is left alone too.
 The row hides itself if the plugin is removed; `--remove-menu-row` takes it out.
 
 Differences from running it standalone:
